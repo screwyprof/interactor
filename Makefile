@@ -34,10 +34,18 @@ test: ## run all tests
 	@echo -e "$(OK_COLOR)--> Running unit tests$(NO_COLOR)"
 	go test -v --race --count=1 -coverprofile=coverage.out ./...
 
+coverage: test ## show test coverage report
+	@echo -e "$(OK_COLOR)--> Showing test coverage$(NO_COLOR)"
+	go tool cover -func=coverage.out
+
+clean: ## remove build artifacts and generated files
+	@echo -e "$(OK_COLOR)--> Cleaning up$(NO_COLOR)"
+	rm -f coverage.out
+
 help: ## show this help screen
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "$(MAKE_COLOR)  %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # To avoid unintended conflicts with file names, always add to .PHONY
 # unless there is a reason not to.
 # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
-.PHONY: all deps test fmt clean help
+.PHONY: all deps fmt lint test coverage clean help
