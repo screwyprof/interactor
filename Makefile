@@ -32,7 +32,7 @@ lint: ## run linters for current changes
 
 test: ## run all tests
 	@echo -e "$(OK_COLOR)--> Running unit tests$(NO_COLOR)"
-	go test -v --race --count=1 ./...
+	go test -v --race --count=1 -coverprofile=coverage.out ./...
 
 help: ## show this help screen
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {sub("\\\\n",sprintf("\n%22c"," "), $$2);printf "$(MAKE_COLOR)  %s\n", $$1, $$2}' $(MAKEFILE_LIST)
