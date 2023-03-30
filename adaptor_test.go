@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/screwyprof/interactor"
 )
@@ -65,6 +66,20 @@ func TestAdapt(t *testing.T) {
 
 		// assert
 		assertSecondArgIsAreRequestType(t, err)
+	})
+	t.Run("second input param maybe be a pointer to a struct implementing Request", func(t *testing.T) {
+		t.Parallel()
+
+		// arrange
+		runner := func(ctx context.Context, req *TestRequest, resp *TestResponse) error {
+			return nil
+		}
+
+		// act
+		_, err := interactor.Adapt(runner)
+
+		// assert
+		require.NoError(t, err)
 	})
 
 	t.Run("third input param must be a pointer type implementing Response", func(t *testing.T) {

@@ -21,9 +21,9 @@ var (
 //
 // The function must have the following signature:
 //  1. Have 3 arguments:
-//     * ctx context.Context,
-//     * req a struct which implements Request interface,
-//     * res a pointer to a struct which implements Response interface.
+//     - ctx context.Context,
+//     - req a struct which implements Request interface,
+//     - res a pointer to a struct which implements Response interface.
 //  2. Return an error
 //
 // An example signature may look like as follows:
@@ -108,7 +108,11 @@ func firstArgIsContext(useCaseRunnerType reflect.Type) bool {
 
 func secondArgIsRequest(useCaseRunnerType reflect.Type) bool {
 	requestInterface := reflect.TypeOf((*Request)(nil)).Elem()
+
 	secondArg := useCaseRunnerType.In(1)
+	if secondArg.Kind() == reflect.Ptr {
+		secondArg = secondArg.Elem()
+	}
 
 	return secondArg.Kind() == reflect.Struct && secondArg.Implements(requestInterface)
 }
