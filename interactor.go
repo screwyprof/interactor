@@ -10,7 +10,7 @@
 //		useCaseRunner := &ConcreteUseCase{res: 42}
 //
 //		dispatcher := interactor.NewDispatcher()
-//		dispatcher.Register(TestRequest{}, interactor.MustAdapt(useCaseRunner.RunUseCase))
+//		dispatcher.RegisterFn(TestRequest{}, interactor.Must(interactor.Adapt(useCaseRunner)))
 //
 //		// act
 //		var res TestResponse

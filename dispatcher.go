@@ -2,13 +2,9 @@ package interactor
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"reflect"
 )
-
-// ErrUseCaseRunnerNotFound is returned when the use case runner is not registered for the given Request type.
-var ErrUseCaseRunnerNotFound = errors.New("use case runner not registered for the given request type")
 
 // Dispatcher manages registered UseCaseRunners and dispatches requests to the appropriate UseCaseRunner.
 type Dispatcher struct {

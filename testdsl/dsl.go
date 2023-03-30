@@ -30,7 +30,7 @@ type InteractorTester func(given GivenFn, when WhenFn, then ThenFn)
 //
 //	want := &TestResponse{result: 123}
 //	useCaseRunner := &ConcreteUseCase{res: want.result}
-//	adaptedUseCaseRunner := interactor.MustAdapt(useCaseRunner.Run)
+//	adaptedUseCaseRunner := interactor.Must(interactor.Func(useCaseRunner.Run))
 //
 //	Test(t)(
 //		Given(adaptedUseCaseRunner.Run),

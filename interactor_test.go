@@ -17,7 +17,7 @@ func TestInteractorAcceptance(t *testing.T) {
 
 		want := errors.New("some error")
 		useCaseRunner := &ConcreteUseCase{err: want}
-		adaptedUseCaseRunner := interactor.MustAdapt(useCaseRunner.RunUseCase)
+		adaptedUseCaseRunner := interactor.MustAdapt(useCaseRunner)
 
 		Test(t)(
 			Given(adaptedUseCaseRunner.Run),
@@ -31,7 +31,7 @@ func TestInteractorAcceptance(t *testing.T) {
 
 		want := &TestResponse{result: 123}
 		useCaseRunner := &ConcreteUseCase{}
-		adaptedUseCaseRunner := interactor.MustAdapt(useCaseRunner.RunUseCase)
+		adaptedUseCaseRunner := interactor.Must(interactor.Func(useCaseRunner.Run))
 
 		Test(t)(
 			Given(adaptedUseCaseRunner.Run),
