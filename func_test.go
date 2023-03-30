@@ -10,14 +10,14 @@ import (
 	"github.com/screwyprof/interactor"
 )
 
-func TestAdapt(t *testing.T) {
+func TestFunc(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a use case runner must be a function", func(t *testing.T) {
 		t.Parallel()
 
 		// act
-		_, err := interactor.Adapt(struct{}{})
+		_, err := interactor.Func(struct{}{})
 
 		// assert
 		assertUseCaseRunnerIsAFunction(t, err)
@@ -32,7 +32,7 @@ func TestAdapt(t *testing.T) {
 		}
 
 		// act
-		_, err := interactor.Adapt(invalidRunner)
+		_, err := interactor.Func(invalidRunner)
 
 		// assert
 		assertUseCaseRunnerHasInvalidSignature(t, err)
@@ -47,7 +47,7 @@ func TestAdapt(t *testing.T) {
 		}
 
 		// act
-		_, err := interactor.Adapt(invalidRunner)
+		_, err := interactor.Func(invalidRunner)
 
 		// assert
 		assertFirstArgHasContextType(t, err)
@@ -62,7 +62,7 @@ func TestAdapt(t *testing.T) {
 		}
 
 		// act
-		_, err := interactor.Adapt(invalidRunner)
+		_, err := interactor.Func(invalidRunner)
 
 		// assert
 		assertSecondArgIsAreRequestType(t, err)
@@ -76,7 +76,7 @@ func TestAdapt(t *testing.T) {
 		}
 
 		// act
-		_, err := interactor.Adapt(runner)
+		_, err := interactor.Func(runner)
 
 		// assert
 		require.NoError(t, err)
@@ -91,7 +91,7 @@ func TestAdapt(t *testing.T) {
 		}
 
 		// act
-		_, err := interactor.Adapt(invalidRunner)
+		_, err := interactor.Func(invalidRunner)
 
 		// assert
 		assertThirdArgIsAResponseType(t, err)
@@ -103,7 +103,7 @@ func TestAdapt(t *testing.T) {
 		// arrange
 		type AnotherResponse struct{}
 
-		runner, err := interactor.Adapt(ConcreteUseCase{}.RunUseCase)
+		runner, err := interactor.Func(ConcreteUseCase{}.Run)
 		assert.NoError(t, err)
 
 		// act
@@ -117,7 +117,7 @@ func TestAdapt(t *testing.T) {
 		t.Parallel()
 
 		// act
-		_, err := interactor.Adapt(ConcreteUseCase{}.RunUseCase)
+		_, err := interactor.Func(ConcreteUseCase{}.Run)
 
 		// assert
 		assert.NoError(t, err)
@@ -130,7 +130,7 @@ func TestAdapt(t *testing.T) {
 		want := TestResponse{result: 123}
 
 		// act
-		runner, err := interactor.Adapt(ConcreteUseCase{}.RunUseCase)
+		runner, err := interactor.Func(ConcreteUseCase{}.Run)
 		assert.NoError(t, err)
 
 		var res TestResponse
@@ -148,7 +148,7 @@ func TestAdapt(t *testing.T) {
 		want := errSomeErr
 
 		// act
-		runner, err := interactor.Adapt(ConcreteUseCase{err: want}.RunUseCase)
+		runner, err := interactor.Func(ConcreteUseCase{err: want}.Run)
 		assert.NoError(t, err)
 
 		err = runner(context.Background(), TestRequest{}, &TestResponse{})
@@ -158,14 +158,14 @@ func TestAdapt(t *testing.T) {
 	})
 }
 
-func TestMustAdapt(t *testing.T) {
+func TestMust(t *testing.T) {
 	t.Parallel()
 
 	t.Run("it panics if it cannot adapt a use case runner", func(t *testing.T) {
 		t.Parallel()
 
 		assert.Panics(t, func() {
-			interactor.MustAdapt(struct{}{})
+			interactor.Must(interactor.Func(struct{}{}))
 		})
 	})
 
@@ -173,7 +173,7 @@ func TestMustAdapt(t *testing.T) {
 		t.Parallel()
 
 		// act
-		runner := interactor.MustAdapt(ConcreteUseCase{}.RunUseCase)
+		runner := interactor.Must(interactor.Func(ConcreteUseCase{}.Run))
 
 		// assert
 		assert.NotNil(t, runner)

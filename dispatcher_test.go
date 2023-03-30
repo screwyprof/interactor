@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/screwyprof/interactor"
 )
@@ -38,24 +39,25 @@ func TestDispatcher(t *testing.T) {
 		t.Parallel()
 
 		// arrange
-		useCaseRunner := &GeneralUseCaseSpy{}
+		useCaseRunner := &ConcreteUseCase{}
 
 		dispatcher := interactor.NewDispatcher()
-		dispatcher.Register(TestRequest{}, useCaseRunner.Run)
+		dispatcher.Register(TestRequest{}, interactor.Must(interactor.Adapt(useCaseRunner)))
 
 		// act
 		var res TestResponse
-		err := dispatcher.Run(context.Background(), TestRequest{}, &res)
+		err := dispatcher.Run(context.Background(), TestRequest{id: 123}, &res)
 
 		// assert
-		assertUseCaseWasRunSuccessfully(t, err, useCaseRunner)
+		require.NoError(t, err)
+		assert.Equal(t, res.result, 123)
 	})
 }
 
 func BenchmarkDispatcher(b *testing.B) {
 	dispatcher := interactor.NewDispatcher()
-	useCaseRunner := &GeneralUseCaseSpy{}
-	dispatcher.Register(TestRequest{}, useCaseRunner.Run)
+	useCaseRunner := &ConcreteUseCase{}
+	dispatcher.Register(TestRequest{}, interactor.Must(interactor.Adapt(useCaseRunner)))
 
 	var res TestResponse
 
@@ -67,13 +69,6 @@ func BenchmarkDispatcher(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		_ = dispatcher.Run(ctx, req, &res)
 	}
-}
-
-func assertUseCaseWasRunSuccessfully(t *testing.T, err error, useCaseRunner *GeneralUseCaseSpy) {
-	t.Helper()
-
-	assert.NoError(t, err)
-	assert.True(t, useCaseRunner.wasCalled)
 }
 
 func assertUseCaseRunnerNotFound(t *testing.T, err error) {

@@ -13,7 +13,7 @@ func ExampleDispatcher() {
 	useCaseRunner := &ConcreteUseCase{}
 
 	dispatcher := interactor.NewDispatcher()
-	dispatcher.Register(TestRequest{}, interactor.MustAdapt(useCaseRunner.RunUseCase))
+	dispatcher.Register(TestRequest{}, interactor.MustAdapt(useCaseRunner))
 
 	// act
 	var res TestResponse

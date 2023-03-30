@@ -11,13 +11,14 @@ import (
 var (
 	ErrInvalidUseCaseRunnerSignature = errors.New("useCaseRunner must have 3 input params")
 	ErrUseCaseRunnerIsNotAFunction   = errors.New("useCaseRunner is not a function")
+	ErrUseCaseRunnerHasNoRunMethod   = errors.New("useCaseRunner has no valid Run method")
 	ErrFirstArgHasInvalidType        = errors.New("first input argument must have context.Context type")
 	ErrSecondArgHasInvalidType       = errors.New("second input argument must implement Request interface")
 	ErrThirdArgHasInvalidType        = errors.New("third input argument must implement Response interface")
 	ErrResultTypeMismatch            = errors.New("result type mismatch")
 )
 
-// Adapt is a helper function that converts a function with the appropriate signature into a UseCaseRunnerFn.
+// Func is a helper function that converts a function with the appropriate signature into a UseCaseRunnerFn.
 //
 // The function must have the following signature:
 //  1. Have 3 arguments:
@@ -29,7 +30,7 @@ var (
 // An example signature may look like as follows:
 //
 //	func(ctx context.Context, req TestRequest, res *TestResponse) error
-func Adapt(fn interface{}) (UseCaseRunnerFn, error) {
+func Func(fn interface{}) (UseCaseRunnerFn, error) {
 	useCaseRunnerType := reflect.TypeOf(fn)
 	if err := ensureSignatureIsValid(useCaseRunnerType); err != nil {
 		return nil, err
@@ -44,16 +45,49 @@ func Adapt(fn interface{}) (UseCaseRunnerFn, error) {
 	}, nil
 }
 
-// MustAdapt is a wrapper around Adapt which panics if an error occurs.
+// Must is a wrapper around Func which panics if an error occurs.
 //
 // It is useful for tests and for cases where you are sure that the signature is valid.
-func MustAdapt(fn interface{}) UseCaseRunnerFn {
-	r, err := Adapt(fn)
+// You can use it like this:
+//
+//	interactor.Must(interactor.Func(userCaseRunner.run))
+func Must(fn UseCaseRunnerFn, err error) UseCaseRunnerFn {
 	if err != nil {
 		panic(err)
 	}
 
-	return r
+	return fn
+}
+
+// Adapt is a helper function that converts a struct with a Run method into a UseCaseRunnerFn.
+//
+// The function `Run` must have the following signature:
+//  1. Have 3 arguments:
+//     - ctx context.Context,
+//     - req a struct which implements Request interface,
+//     - res a pointer to a struct which implements Response interface.
+//  2. Return an error
+//
+// An example signature may look like as follows:
+//
+//	func (uc *UseCase) Run(ctx context.Context, req TestRequest, res *TestResponse) error
+func Adapt(runner interface{}) (UseCaseRunnerFn, error) {
+	fnValue := reflect.ValueOf(runner).MethodByName("Run")
+	if !fnValue.IsValid() {
+		return nil, fmt.Errorf("%w", ErrUseCaseRunnerHasNoRunMethod)
+	}
+
+	return Func(fnValue.Interface())
+}
+
+// MustAdapt is a wrapper around Adapt which panics if an error occurs.
+//
+// It is useful for tests and for cases where you are sure that the runner has a `Ru`n method with a valid signature.
+// You can use it like this:
+//
+//	interactor.MustAdapt(userCaseRunner)
+func MustAdapt(fn interface{}) UseCaseRunnerFn {
+	return Must(Adapt(fn))
 }
 
 func ensureSignatureIsValid(useCaseRunnerType reflect.Type) error {
