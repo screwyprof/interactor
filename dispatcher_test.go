@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/screwyprof/interactor"
+	"github.com/screwyprof/interactor/v2"
 )
 
 func TestDispatcher(t *testing.T) {

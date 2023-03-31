@@ -17,7 +17,7 @@ The library is designed to be well-documented, thoroughly tested, and easy to us
 To install the Interactor Library, run the following command:
 
 ```bash
-go get -u github.com/screwyprof/interactor
+go get -u github.com/screwyprof/interactor/v2
 ```
 
 ## Usage
@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/screwyprof/interactor"
+	"github.com/screwyprof/interactor/v2"
 )
 
 // TestRequest represents a test request.
@@ -76,7 +76,7 @@ func main() {
 
 For more information and detailed documentation, please refer to the GoDoc documentation:
 
-[Interactor Library GoDoc](https://pkg.go.dev/github.com/screwyprof/interactor)
+[Interactor Library GoDoc](https://pkg.go.dev/github.com/screwyprof/interactor/v2)
 
 ## Contributing
 

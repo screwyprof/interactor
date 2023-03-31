@@ -1,4 +1,4 @@
-module github.com/screwyprof/interactor
+module github.com/screwyprof/interactor/v2
 
 go 1.20
 

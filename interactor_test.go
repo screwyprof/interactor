@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/screwyprof/interactor"
-	. "github.com/screwyprof/interactor/testdsl"
+	"github.com/screwyprof/interactor/v2"
+	. "github.com/screwyprof/interactor/v2/testdsl"
 )
 
 func TestInteractorAcceptance(t *testing.T) {
