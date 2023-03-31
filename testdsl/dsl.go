@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/screwyprof/interactor"
+	"github.com/screwyprof/interactor/v2"
 )
 
 // GivenFn is a test init function.

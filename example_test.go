@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/screwyprof/interactor"
+	"github.com/screwyprof/interactor/v2"
 )
 
 func ExampleDispatcher() {

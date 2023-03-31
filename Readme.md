@@ -1,7 +1,7 @@
 # Interactor
 
-[![Build Status](https://github.com/screwyprof/interactor/actions/workflows/go.yml/badge.svg)](https://github.com/screwyprof/interactor/actions/workflows/go.yml)
-[![codecov](https://codecov.io/gh/screwyprof/interactor/branch/main/graph/badge.svg)](https://codecov.io/gh/screwyprof/interactor)
+[![Build Status](https://github.com/screwyprof/interactor/v2/actions/workflows/go.yml/badge.svg)](https://github.com/screwyprof/interactor/v2/actions/workflows/go.yml)
+[![codecov](https://codecov.io/gh/screwyprof/interactor/v2/branch/main/graph/badge.svg)](https://codecov.io/gh/screwyprof/interactor/v2)
 
 `Interactor` is a simple and efficient Go package for managing and dispatching requests to the appropriate use cases according to their request types. It is inspired by Uncle Bob's [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) and the interactor concept described therein.
 
@@ -17,7 +17,7 @@ The library is designed to be well-documented, thoroughly tested, and easy to us
 To install the Interactor Library, run the following command:
 
 ```bash
-go get -u github.com/screwyprof/interactor
+go get -u github.com/screwyprof/interactor/v2
 ```
 
 ## Usage
@@ -30,7 +30,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/screwyprof/interactor"
+	"github.com/screwyprof/interactor/v2"
 )
 
 // TestRequest represents a test request.
@@ -76,7 +76,7 @@ func main() {
 
 For more information and detailed documentation, please refer to the GoDoc documentation:
 
-[Interactor Library GoDoc](https://pkg.go.dev/github.com/screwyprof/interactor)
+[Interactor Library GoDoc](https://pkg.go.dev/github.com/screwyprof/interactor/v2)
 
 ## Contributing
 
