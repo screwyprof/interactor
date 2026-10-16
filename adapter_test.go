@@ -187,7 +187,7 @@ func TestMust(t *testing.T) {
 
 type testCase struct {
 	name          string
-	runner        interface{}
+	runner        any
 	request       interactor.Request
 	response      interactor.Response
 	wantErr       error

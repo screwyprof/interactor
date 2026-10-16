@@ -28,10 +28,10 @@ package interactor
 import "context"
 
 // Request is an interface representing the input for the use case.
-type Request interface{}
+type Request any
 
 // Response is an interface representing the output from the use case.
-type Response interface{}
+type Response any
 
 // UseCaseRunner is an interface that defines a contract for running a use case.
 type UseCaseRunner interface {
