@@ -1,34 +1,38 @@
-# This repo's root import path.
-PKG := gitlab.com/screwyprof/golibs
+GO_FILES = $(shell git ls-files -co --exclude-standard "*.go")
 
-## DO NOT EDIT BELLOW THIS LINE
-GO_FILES = $(shell find . -name "*.go" | uniq)
-GO_PACKAGES = $(shell go list ./... | tr '\n', ',')
-LOCAL_PACKAGES="github.com/screwyprof/"
+# Tools run with `go run pkg@version`, so the version named here is the one that runs, locally and in CI.
+GOLANGCI_VERSION := v2.15.0
+REVIEWDOG_VERSION := v0.21.2
+GOLANGCI := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 
 SHELL := bash
+.SHELLFLAGS := -eu -o pipefail -c
 
 OK_COLOR=\033[32;01m
 NO_COLOR=\033[0m
 MAKE_COLOR=\033[33;01m%-20s\033[0m
 
-all: deps fmt test ## download deps, format code, run tests
-
-deps: ## sync go mod deps
-	@echo -e "$(OK_COLOR)--> Installing dev dependencies and tools$(NO_COLOR)"
-	go install mvdan.cc/gofumpt@v0.3.1
-	go install github.com/daixiang0/gci@v0.8.0
+all: fmt lint-all test ## format code, run linters and tests
 
 fmt: ## format go files
 	@echo -e "$(OK_COLOR)--> Formatting go files$(NO_COLOR)"
 	@go mod tidy
-	@go fmt ./...
-	@gofumpt -l -w .
-	@gci write $(GO_FILES) -s standard  -s default -s "prefix($(LOCAL_PACKAGES))"
+	@$(GOLANGCI) fmt $(GO_FILES)
 
 lint: ## run linters for current changes
 	@echo -e "$(OK_COLOR)==> Linting current changes$(NO_COLOR)"
-	golangci-lint run ./...
+	$(GOLANGCI) run ./...
+
+# --new-from-merge-base in .golangci.yml is a separate key from --new-from-rev; both must be cleared.
+lint-all: ## run linters over the whole tree, unfiltered
+	@echo -e "$(OK_COLOR)==> Linting$(NO_COLOR)"
+	$(GOLANGCI) run ./... --new-from-rev="" --new-from-merge-base=""
+
+# CI only: renders the findings `lint` reports as annotations on the pull request diff.
+lint-annotate:
+	@$(GOLANGCI) run ./... --output.text.print-issued-lines=false --output.text.colors=false --show-stats=false \
+		| go run github.com/reviewdog/reviewdog/cmd/reviewdog@$(REVIEWDOG_VERSION) \
+			-f=golangci-lint -name=golangci-lint -reporter=github-pr-check -fail-level=any
 
 test: ## run all tests
 	@echo -e "$(OK_COLOR)--> Running unit tests$(NO_COLOR)"
@@ -48,4 +52,4 @@ help: ## show this help screen
 # To avoid unintended conflicts with file names, always add to .PHONY
 # unless there is a reason not to.
 # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
-.PHONY: all deps fmt lint test coverage clean help
+.PHONY: all fmt lint lint-all lint-annotate test coverage clean help

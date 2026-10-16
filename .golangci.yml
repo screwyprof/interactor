@@ -1,22 +1,10 @@
-# https://golangci-lint.run/usage/configuration/#config-file
+# https://golangci-lint.run/docs/configuration/file/
+version: "2"
+
 run:
-  deadline: 20m
-
-  skip-dirs-use-default: true
-
-  # timeout for analysis, e.g. 30s, 5m, default is 1m
-  timeout: 1m
-
-  #skip-dirs:
-    #- some/path
-
-  #skip-files:
-    #- some/path
-
-modules-download-mode: readonly
-
+  modules-download-mode: readonly
 linters:
-  disable-all: true
+  default: none
   enable:
     - asasalint
     - asciicheck
@@ -24,23 +12,18 @@ linters:
     - bodyclose
     - containedctx
     - contextcheck
+    - copyloopvar
     - cyclop
-    - depguard
     - dogsled
     - dupl
     - durationcheck
+    - err113
     - errcheck
     - errchkjson
-    #- errname
     - errorlint
-    - execinquery
-    #- errorsas
     - exhaustive
-    - exportloopref
-    #- forbidigo
     - forcetypeassert
     - funlen
-    - gci
     - gochecknoglobals
     - gochecknoinits
     - gocognit
@@ -48,27 +31,16 @@ linters:
     - gocritic
     - gocyclo
     - godot
-    #- godox
-    - goerr113
-    - gofmt
-    - gofumpt
     - goheader
-    - goimports
-    #- gomnd
     - gomoddirectives
-    - gomodguard
     - goprintffuncname
     - gosec
-    - grouper
-    - gosimple
     - govet
-    #- httpresponse
+    - grouper
     - importas
-    - interfacebloat
-    #- ireturn
     - ineffassign
+    - interfacebloat
     - lll
-    #- logrlint
     - maintidx
     - makezero
     - misspell
@@ -89,74 +61,70 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - staticcheck
-    - stylecheck
-    #- tagliatelle
-    - tenv
     - testpackage
     - thelper
     - tparallel
-    - typecheck
     - unconvert
     - unparam
-    - usestdlibvars
     - unused
-    #- varnamelen
+    - usestdlibvars
+    - usetesting
     - wastedassign
     - whitespace
     - wrapcheck
-    - wsl
+    - wsl_v5
+  settings:
+    goconst:
+      min-len: 2
+      min-occurrences: 2
+    gocyclo:
+      min-complexity: 10
+    govet:
+      enable:
+        - shadow
+    lll:
+      line-length: 120
+      tab-width: 4
+    nolintlint:
+      allow-unused: false
+    wrapcheck:
+      # Substrings of signatures to ignore; overrides wrapcheck's default set.
+      # See https://github.com/tomarrell/wrapcheck#configuration
+      ignore-sigs:
+        - fmt.Errorf(
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Exclude some linters from running on test files. goconst among them: a table case name
+      # repeated across two tests is a fixture, not a constant waiting to be named.
+      - linters:
+          - dupl
+          - err113
+          - funlen
+          - goconst
+          - gosec
+        path: _test\.go
+      - linters:
+          - wrapcheck
+        path: testdsl/
 issues:
-  # Show only new issues created after git revision `REV`
-  new-from-rev: main
-
-  exclude-rules:
-    # Exclude some linters from running on tests files.
-    - path: _test\.go
-      linters:
-        - funlen
-        - gosec
-        - dupl
-        - goerr113
-
-    - path: test_helpers\.go
-      linters:
-        - funlen
-        - gosec
-        - dupl
-        - goerr113
-
-    - path: testdsl
-      linters:
-        - wrapcheck
-output:
-  sort-results: true
-
-linters-settings:
-  golint:
-    min-confidence: 0
-  goconst:
-    min-len: 2
-    min-occurrences: 2
-  gofmt:
-    auto-fix: false
-  govet:
-    check-shadowing: true
-  gocyclo:
-    min-complexity: 10
-  gci:
-    # put imports beginning with prefix after 3rd-party packages;
-    # only support one prefix
-    # if not set, use goimports.local-prefixes
-    local-prefixes: github.com/screwyprof
-    sections:
-      - standard
-      - default
-      - prefix(github.com/screwyprof)
-  nolintlint:
-    allow-unused: true # report any unused nolint directives
-  wrapcheck:
-    # An array of strings that specify substrings of signatures to ignore.
-    # If this set, it will override the default set of ignored signatures.
-    # See https://github.com/tomarrell/wrapcheck#configuration for more information.
-    ignoreSigs:
-      - fmt.Errorf
+  # Only what this branch added, measured against where it left main. origin/main, not main: a CI
+  # checkout has no local branch of that name, only remote-tracking refs. `make lint-all` clears it.
+  new-from-merge-base: origin/main
+formatters:
+  enable:
+    - gofumpt
+    - gci
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/screwyprof)
+  exclusions:
+    generated: lax

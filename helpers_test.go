@@ -29,30 +29,30 @@ type AnotherResponse struct{}
 
 type InvalidUseCaseWrongSignature struct{}
 
-func (i InvalidUseCaseWrongSignature) Run(ctx context.Context, req TestRequest) error {
+func (i InvalidUseCaseWrongSignature) Run(_ context.Context, _ TestRequest) error {
 	return nil
 }
 
 type InvalidUseCaseWrongContext struct{}
 
-func (i InvalidUseCaseWrongContext) Run(ctx struct{}, req TestRequest, resp *TestResponse) error {
+func (i InvalidUseCaseWrongContext) Run(_ struct{}, _ TestRequest, _ *TestResponse) error {
 	return nil
 }
 
 type InvalidUseCaseWrongRequest struct{}
 
-func (i InvalidUseCaseWrongRequest) Run(ctx context.Context, req int, resp *TestResponse) error {
+func (i InvalidUseCaseWrongRequest) Run(_ context.Context, _ int, _ *TestResponse) error {
 	return nil
 }
 
 type ValidUseCasePointerRequest struct{}
 
-func (i ValidUseCasePointerRequest) Run(ctx context.Context, req *TestRequest, resp *TestResponse) error {
+func (i ValidUseCasePointerRequest) Run(_ context.Context, _ *TestRequest, _ *TestResponse) error {
 	return nil
 }
 
 type InvalidUseCaseWrongResponse struct{}
 
-func (i InvalidUseCaseWrongResponse) Run(ctx context.Context, req TestRequest, resp struct{}) error {
+func (i InvalidUseCaseWrongResponse) Run(_ context.Context, _ TestRequest, _ struct{}) error {
 	return nil
 }

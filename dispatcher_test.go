@@ -18,6 +18,7 @@ func TestDispatcher(t *testing.T) {
 		t.Parallel()
 
 		dispatcher := interactor.NewDispatcher()
+
 		var _ interactor.UseCaseRunner = dispatcher
 	})
 
@@ -29,6 +30,7 @@ func TestDispatcher(t *testing.T) {
 
 		// act
 		var res TestResponse
+
 		err := dispatcher.Run(context.Background(), TestRequest{}, &res)
 
 		// assert
@@ -46,6 +48,7 @@ func TestDispatcher(t *testing.T) {
 
 		// act
 		var res TestResponse
+
 		err := dispatcher.Run(context.Background(), TestRequest{id: 123}, &res)
 
 		// assert

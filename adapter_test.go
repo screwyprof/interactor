@@ -21,35 +21,35 @@ func TestFunc(t *testing.T) {
 		},
 		{
 			name: "a use case runner must have 3 arguments",
-			runner: func(ctx context.Context, req TestRequest) error {
+			runner: func(_ context.Context, _ TestRequest) error {
 				return nil
 			},
 			wantErr: interactor.ErrInvalidUseCaseRunnerSignature,
 		},
 		{
 			name: "first input param must be context.Context",
-			runner: func(ctx struct{}, req TestRequest, resp *TestResponse) error {
+			runner: func(_ struct{}, _ TestRequest, _ *TestResponse) error {
 				return nil
 			},
 			wantErr: interactor.ErrFirstArgHasInvalidType,
 		},
 		{
 			name: "second input param must be a struct implementing Request",
-			runner: func(ctx context.Context, req int, resp *TestResponse) error {
+			runner: func(_ context.Context, _ int, _ *TestResponse) error {
 				return nil
 			},
 			wantErr: interactor.ErrSecondArgHasInvalidType,
 		},
 		{
 			name: "third input param must be a pointer type implementing Response",
-			runner: func(ctx context.Context, req TestRequest, resp struct{}) error {
+			runner: func(_ context.Context, _ TestRequest, _ struct{}) error {
 				return nil
 			},
 			wantErr: interactor.ErrThirdArgHasInvalidType,
 		},
 		{
 			name: "provided response type must match expected response type",
-			runner: func(ctx context.Context, req TestRequest, resp *TestResponse) error {
+			runner: func(_ context.Context, _ TestRequest, _ *TestResponse) error {
 				return nil
 			},
 			request: TestRequest{},
@@ -60,7 +60,7 @@ func TestFunc(t *testing.T) {
 		},
 		{
 			name: "a use case returns an error",
-			runner: func(ctx context.Context, req TestRequest, resp *TestResponse) error {
+			runner: func(_ context.Context, _ TestRequest, _ *TestResponse) error {
 				return errSomeErr
 			},
 			request:       TestRequest{id: 123},
@@ -69,7 +69,7 @@ func TestFunc(t *testing.T) {
 		},
 		{
 			name: "second input param maybe be a pointer to a struct implementing Request",
-			runner: func(ctx context.Context, req *TestRequest, resp *TestResponse) error {
+			runner: func(_ context.Context, _ *TestRequest, _ *TestResponse) error {
 				return nil
 			},
 			request:    &TestRequest{},
@@ -78,7 +78,7 @@ func TestFunc(t *testing.T) {
 		},
 		{
 			name: "provided use case successfully adapted to comply with UseCaseRunner interface",
-			runner: func(ctx context.Context, req TestRequest, resp *TestResponse) error {
+			runner: func(_ context.Context, req TestRequest, resp *TestResponse) error {
 				resp.result = req.id
 
 				return nil
@@ -90,8 +90,6 @@ func TestFunc(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			runFuncTest(t, tc)
@@ -158,8 +156,6 @@ func TestAdapt(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			runAdaptTest(t, tc)

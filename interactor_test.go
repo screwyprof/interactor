@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/screwyprof/interactor/v2"
-	. "github.com/screwyprof/interactor/v2/testdsl"
+	. "github.com/screwyprof/interactor/v2/testdsl" //nolint:revive // the DSL reads as Given/When/Then.
 )
 
 func TestInteractorAcceptance(t *testing.T) {

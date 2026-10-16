@@ -142,7 +142,7 @@ func secondArgIsRequest(useCaseRunnerType reflect.Type) bool {
 	requestInterface := reflect.TypeOf((*Request)(nil)).Elem()
 
 	secondArg := useCaseRunnerType.In(1)
-	if secondArg.Kind() == reflect.Ptr {
+	if secondArg.Kind() == reflect.Pointer {
 		secondArg = secondArg.Elem()
 	}
 
@@ -153,7 +153,7 @@ func thirdArgIsResponse(useCaseRunnerType reflect.Type) bool {
 	responseInterface := reflect.TypeOf((*Response)(nil)).Elem()
 	thirdArg := useCaseRunnerType.In(2)
 
-	return thirdArg.Kind() == reflect.Ptr && thirdArg.Implements(responseInterface)
+	return thirdArg.Kind() == reflect.Pointer && thirdArg.Implements(responseInterface)
 }
 
 func invokeUseCaseRunner(useCaseRunner interface{}, args ...interface{}) error {

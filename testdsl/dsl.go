@@ -79,7 +79,7 @@ func ThenFailWith(want error) ThenFn {
 	return func(tb testing.TB) Checker {
 		tb.Helper()
 
-		return func(res interactor.Response, err error) {
+		return func(_ interactor.Response, err error) {
 			tb.Helper()
 
 			assert.ErrorIs(tb, err, want)
