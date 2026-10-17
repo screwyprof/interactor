@@ -59,21 +59,28 @@ func main() {
 - The zero `Dispatcher` is ready to use and safe for concurrent use.
 - Request types match exactly: `Hello` and `*Hello` are different types.
 
-### Do you need the dispatcher?
+### Dispatcher or a single use case?
 
-Not when the caller knows the use case at compile time. `UseCase` is a plain interface, so inject it and call it directly: no lookup, no registration errors, and a missing dependency fails to compile.
+The `Dispatcher` gives a component one dependency through which it runs many use cases:
 
 ```go
 type Handler struct {
-	greet interactor.UseCase[Hello, Greeting]
+	uc *interactor.Dispatcher
 }
 
-func (h Handler) ServeHello(ctx context.Context, name string) (Greeting, error) {
-	return h.greet.Run(ctx, Hello{Name: name})
+func (h Handler) Checkout(ctx context.Context, cart Cart) (Receipt, error) {
+	order, err := h.uc.Dispatch[Order](ctx, PlaceOrder{Cart: cart})
+	if err != nil {
+		return Receipt{}, err
+	}
+
+	return h.uc.Dispatch[Receipt](ctx, ChargeOrder{OrderID: order.ID})
 }
 ```
 
-Use the `Dispatcher` when the request type is only known at runtime, such as a transport layer that decodes a message and routes it by type.
+In tests, register fake use cases on a real `Dispatcher`; no mock is needed.
+
+A component that runs a single use case can depend on it directly, since `UseCase` is a plain interface: `greet interactor.UseCase[Hello, Greeting]`, then `h.greet.Run(ctx, req)`.
 
 ### Errors
 
