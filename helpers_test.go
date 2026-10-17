@@ -22,17 +22,6 @@ func (uc AnswerQuestion) Run(_ context.Context, q Question) (Answer, error) {
 	return Answer{Value: q.ID * 2}, nil
 }
 
-// legacyAnswerQuestion is the same use case in the v2 shape, writing through a pointer.
-func legacyAnswerQuestion(_ context.Context, q Question, res *Answer) error {
-	if q.ID < 0 {
-		return errBoom
-	}
-
-	res.Value = q.ID * 2
-
-	return nil
-}
-
 // Ticket is a distinct request type per K, so tests can register many types.
 type Ticket[K any] struct{ N int }
 

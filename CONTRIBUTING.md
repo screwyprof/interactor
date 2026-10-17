@@ -29,7 +29,7 @@ and prints one block per gate:
 | `make lint-all` | the linters [.golangci.yml](.golangci.yml) enables, over the whole tree |
 | `make tidy` | `go mod tidy -diff`, so a stale go.mod or go.sum cannot reach main |
 | `make vulns` | govulncheck, which reports only what this module can actually call |
-| `make mutate` | mutation testing with gremlins: every mutant must be covered and killed, see [.gremlins.yaml](.gremlins.yaml) |
+| `make mutate` | mutation testing with gremlins: every mutant must be covered and killed, none timed out |
 
 All of them are expected to pass before a pull request. `make lint` narrows linting to your
 branch, `make lint-fix` applies the linters' automatic fixes, `make coverage` shows the coverage
@@ -69,7 +69,7 @@ does. `make check` passing is the floor rather than the case for the change.
 
 | | |
 | --- | --- |
-| root package `interactor` | `UseCase`, `UseCaseFunc`, `Dispatcher` and `FromOutParam` |
+| root package `interactor` | `UseCase`, `UseCaseFunc` and `Dispatcher` |
 | `testdsl` | the public Given/When/Then helpers for testing use cases |
 | `internal/nilcheck` | the one definition of a nil use case, shared by both |
 

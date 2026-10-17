@@ -145,7 +145,6 @@ func TestRegister(t *testing.T) {
 		{name: "nil interface", useCase: nil},
 		{name: "nil pointer", useCase: (*AnswerQuestion)(nil)},
 		{name: "nil func", useCase: interactor.UseCaseFunc[Question, Answer](nil)},
-		{name: "nil out-param func", useCase: interactor.FromOutParam[Question, Answer](nil)},
 	}
 
 	for _, tc := range nilUseCases {

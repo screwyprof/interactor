@@ -1,8 +1,0 @@
-# Read by `make mutate`: every mutant must be covered by a test and killed by one. The
-# --threshold-* flags are ignored by gremlins v0.6.0, so the thresholds live here.
-# 99, not 100: v0.6.0 fails a run whose score is <= its threshold, so 100 could never pass.
-# With this suite's few mutants, one survivor or uncovered line drops a score below 99.
-unleash:
-  threshold:
-    efficacy: 99
-    mutant-coverage: 99

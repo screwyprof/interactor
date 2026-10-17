@@ -48,31 +48,6 @@ func ExampleDispatcher_Dispatch_notFound() {
 	// true
 }
 
-// legacyGreet is a v2-style use case, writing its response through a pointer.
-func legacyGreet(_ context.Context, req Hello, res *Greeting) error {
-	res.Text = "Hello again, " + req.Name + "!"
-
-	return nil
-}
-
-func ExampleFromOutParam() {
-	var d interactor.Dispatcher
-
-	d.MustRegister(interactor.FromOutParam(legacyGreet))
-
-	greeting, err := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
-	if err != nil {
-		fmt.Println(err)
-
-		return
-	}
-
-	fmt.Println(greeting.Text)
-
-	// Output:
-	// Hello again, Gopher!
-}
-
 func ExampleUseCaseFunc() {
 	shout := interactor.UseCaseFunc[Hello, Greeting](func(_ context.Context, req Hello) (Greeting, error) {
 		return Greeting{Text: "HELLO, " + req.Name + "!"}, nil

@@ -171,28 +171,33 @@ v3 replaces the reflection-based API with generics. Most of what v2 checked at r
 
 | v2 | v3 |
 |---|---|
-| `Run(ctx, req Req, res *Res) error` | `Run(ctx, req Req) (Res, error)`, or keep it and wrap with `FromOutParam` |
+| `Run(ctx, req Req, res *Res) error` | `Run(ctx, req Req) (Res, error)`; to move one use case at a time, wrap the old shape (below) |
 | `UseCaseRunner`, `UseCaseRunnerFn` | `UseCase[Req, Res]`, `UseCaseFunc[Req, Res]` |
 | code depending on `UseCaseRunner` to accept the dispatcher | `*interactor.Dispatcher`, or an interface you define for the use case you need: a generic method can't satisfy an interface, so the dispatcher no longer implements one |
 | `interactor.NewDispatcher()` | `var d interactor.Dispatcher` |
-| `d.Register(Req{}, interactor.MustAdapt(uc))` | `d.MustRegister(uc)` once `Run` has the v3 shape, or `d.MustRegister(interactor.FromOutParam(uc.Run))` unchanged. A nil `*T` is rejected at registration once `Run` has the v3 shape; through `FromOutParam(uc.Run)` it is not detected (see its doc), so check `uc` first |
-| `d.Register(Req{}, interactor.Must(interactor.Func(fn)))` | `d.MustRegister(interactor.FromOutParam(fn))` unchanged, or `interactor.UseCaseFunc[Req, Res](fn)` once `fn` returns its response |
+| `d.Register(Req{}, interactor.MustAdapt(uc))` | `d.MustRegister(uc)`; a nil `*T` is still rejected at registration |
+| `d.Register(Req{}, interactor.Must(interactor.Func(fn)))` | `d.MustRegister(interactor.UseCaseFunc[Req, Res](fn))` |
 | `var res Res; err := d.Run(ctx, req, &res)` | `res, err := d.Dispatch[Res](ctx, req)` |
 | a request held in `any` was routed by its dynamic type | routing uses the static type: pass the concrete request |
 | registering a type twice overwrote the first | `ErrAlreadyRegistered`, and `MustRegister` panics |
 | a nil runner failed at `Run` with `ErrUseCaseRunnerNotFound` | `ErrNilUseCase` at `Register` |
-| a use case could write to `res` and return an error, and the caller kept both | `FromOutParam` returns the zero response with the error: put such details in the error |
-| a use case could read fields the caller had filled in `res` beforehand | `FromOutParam` always starts from a zero response: move such inputs into the request |
 | `ErrUseCaseRunnerNotFound` | `ErrUseCaseNotFound` |
 | `ErrResultTypeMismatch` | `*ResponseTypeError` |
 | `Request`, `Response`, `Func`, `Adapt`, `Must`, `MustAdapt` and their runtime errors (`ErrRequestTypeMismatch`, `ErrInvalidReturnType`, …) | removed: the compiler checks what they checked at runtime |
 | `testdsl.Test(t)(Given(r), When(ctx, req, &res), Then(want))` and its `InteractorTester`, `GivenFn`, `WhenFn`, `ThenFn`, `Checker` types | `testdsl.Test(t).Given(uc).When(req).Then(want)`, checked at compile time; a custom context goes in `.WithContext(ctx)`; `ThenFailWith(err)` now needs a non-nil error and stops the test on a mismatch |
 
-To move one use case at a time, wrap a v2-style one with `FromOutParam`; it registers unchanged:
+To move one use case at a time, wrap a v2-style `Run` in a `UseCaseFunc` and register that:
 
 ```go
-d.MustRegister(interactor.FromOutParam(legacy.Run))
+d.MustRegister(interactor.UseCaseFunc[Req, Res](func(ctx context.Context, req Req) (Res, error) {
+	var res Res
+	err := legacy.Run(ctx, req, &res)
+
+	return res, err
+}))
 ```
+
+The wrapper is yours to adjust. As written it returns whatever the legacy code wrote to `res`, even alongside an error, and starts each call from a zero `res`, so it never sees values a v2 caller filled in beforehand. If `legacy` is a pointer, check it is not nil before wrapping `legacy.Run`: the dispatcher can only see the wrapper.
 
 ## Documentation
 
