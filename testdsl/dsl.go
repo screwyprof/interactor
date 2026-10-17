@@ -45,6 +45,7 @@ type Given[Req, Res any] struct {
 	tb      testing.TB
 	useCase interactor.UseCase[Req, Res]
 	ctx     context.Context //nolint:containedctx // carried from WithContext to When, within one scenario.
+	ctxSet  bool            // WithContext was called, so ctx is used even when nil
 }
 
 // Given sets the use case under test. A nil use case fails the test.
@@ -58,12 +59,14 @@ func (s *Scenario) Given[Req, Res any](useCase interactor.UseCase[Req, Res]) *Gi
 	return &Given[Req, Res]{tb: s.tb, useCase: useCase}
 }
 
-// WithContext runs the use case under ctx instead of the test's context, for use cases that read
-// values such as the current user from it.
+// WithContext returns a copy of g whose use case runs under ctx instead of the test's context, for
+// use cases that read values such as the current user from it. g itself is unchanged, so it can
+// start other scenarios. ctx is passed as given, nil included.
 func (g *Given[Req, Res]) WithContext(ctx context.Context) *Given[Req, Res] {
-	g.ctx = ctx
+	c := *g
+	c.ctx, c.ctxSet = ctx, true
 
-	return g
+	return &c
 }
 
 // When is a scenario whose use case has run, holding what it returned.
@@ -71,44 +74,44 @@ type When[Res any] struct {
 	tb      testing.TB
 	got     Res
 	err     error
-	checked bool
+	checked *bool
 }
 
 // When runs the use case with req, under the test's context unless WithContext set one. The
-// scenario must end with one of the Then methods, or the test fails at the line that called When.
-// Call When and Then from the test's goroutine, as for any test that can fail. testdsl is for
-// tests: each scenario is kept until the test ends, so in benchmarks call the use case directly.
+// scenario must end with one of the Then methods, or the test fails at the line that called When,
+// unless it is skipped. Call When and Then from the test's goroutine, as for any test that can
+// fail. testdsl is for tests: each scenario is kept until the test ends, so in benchmarks call the
+// use case directly.
 func (g *Given[Req, Res]) When(req Req) *When[Res] {
 	g.tb.Helper()
 
 	ctx := g.ctx
-	if ctx == nil {
+	if !g.ctxSet {
 		ctx = g.tb.Context()
 	}
 
 	got, err := g.useCase.Run(ctx, req)
-	w := &When[Res]{tb: g.tb, got: got, err: err}
 
-	// The cleanup only needs the TB and the flag, not the result, so it keeps nothing large alive.
-	// Marked as a helper, the testing package reports it at the line that called When, honouring
-	// the caller's own t.Helper() marks.
-	tb, checked := g.tb, &w.checked
+	// The flag has its own allocation so the cleanup below keeps only it alive, not the result.
+	tb, checked := g.tb, new(bool)
 
+	// Marked as a helper, the cleanup is reported at the line that called When, honouring the
+	// caller's own t.Helper() marks.
 	tb.Cleanup(func() {
 		tb.Helper()
 
-		if !*checked {
+		if !*checked && !tb.Skipped() {
 			tb.Errorf("testdsl: scenario has no Then, ThenFailWith or ThenCheck")
 		}
 	})
 
-	return w
+	return &When[Res]{tb: tb, got: got, err: err, checked: checked}
 }
 
 // Then expects the use case to have succeeded and returned want.
 func (w *When[Res]) Then(want Res) {
 	w.tb.Helper()
-	w.checked = true
+	*w.checked = true
 
 	require.NoError(w.tb, w.err)
 	assert.Equal(w.tb, want, w.got)
@@ -118,7 +121,7 @@ func (w *When[Res]) Then(want Res) {
 // want must not be nil.
 func (w *When[Res]) ThenFailWith(want error) {
 	w.tb.Helper()
-	w.checked = true
+	*w.checked = true
 
 	if want == nil {
 		require.FailNow(w.tb, "testdsl: ThenFailWith needs the error to expect, got nil")
@@ -132,7 +135,7 @@ func (w *When[Res]) ThenFailWith(want error) {
 // not cover.
 func (w *When[Res]) ThenCheck(check func(tb testing.TB, got Res, err error)) {
 	w.tb.Helper()
-	w.checked = true
+	*w.checked = true
 
 	if check == nil {
 		require.FailNow(w.tb, "testdsl: ThenCheck needs a check, got nil")
