@@ -45,13 +45,11 @@ func (p Pinger) Run(ctx context.Context, req Ping) (Pong, error) {
 type fakeTB struct {
 	testing.TB // methods the DSL must not call panic through the nil interface
 
-	ctx            context.Context //nolint:containedctx // a fake TB has to return a context from Context().
-	errors         []string        // every failure message, in order
-	stopped        bool            // FailNow was called
-	skipped        bool            // SkipNow was called
-	panicked       any             // what the scenario panicked with, if it did
-	failNowReturns bool            // FailNow records the failure and returns, as some TB wrappers do
-	cleanups       []func()
+	ctx      context.Context //nolint:containedctx // a fake TB has to return a context from Context().
+	errors   []string        // every failure message, in order
+	stopped  bool            // FailNow was called
+	skipped  bool            // SkipNow was called
+	cleanups []func()
 }
 
 func (f *fakeTB) Helper() {}
@@ -65,9 +63,7 @@ func (f *fakeTB) Errorf(format string, args ...any) {
 func (f *fakeTB) FailNow() {
 	f.stopped = true
 
-	if !f.failNowReturns {
-		runtime.Goexit()
-	}
+	runtime.Goexit()
 }
 
 func (f *fakeTB) Failed() bool { return len(f.errors) > 0 || f.stopped }
@@ -85,26 +81,27 @@ func (f *fakeTB) Cleanup(fn func()) { f.cleanups = append(f.cleanups, fn) }
 func (f *fakeTB) Context() context.Context { return f.ctx }
 
 // run runs scenario against a fakeTB on its own goroutine, as testing.T would, then its cleanups.
+// Waiting for the goroutine orders its writes to f before the reads here, so f needs no lock. A
+// panic is kept apart from the failures, so a test expecting the DSL to fail cannot pass because
+// it crashed instead.
 func run(t *testing.T, scenario func(tb testing.TB)) *fakeTB {
 	t.Helper()
 
-	return runOn(t, &fakeTB{ctx: t.Context()}, scenario)
-}
+	f := &fakeTB{ctx: t.Context()}
 
-// runOn is run with a fakeTB set up by the caller. Waiting for the goroutine orders its writes to f
-// before the reads here, so f needs no lock. A panic is kept apart from the failures, so a test
-// expecting the DSL to fail cannot pass because it crashed instead.
-func runOn(t *testing.T, f *fakeTB, scenario func(tb testing.TB)) *fakeTB {
-	t.Helper()
-
-	var wg sync.WaitGroup
+	var (
+		wg       sync.WaitGroup
+		panicked any
+	)
 
 	wg.Go(func() {
-		defer func() { f.panicked = recover() }()
+		defer func() { panicked = recover() }()
 
 		scenario(f)
 	})
 	wg.Wait()
+
+	require.Nil(t, panicked, "the scenario panicked instead of failing")
 
 	for _, cleanup := range slices.Backward(f.cleanups) {
 		cleanup()
@@ -113,14 +110,11 @@ func runOn(t *testing.T, f *fakeTB, scenario func(tb testing.TB)) *fakeTB {
 	return f
 }
 
-// failed runs scenario and reports whether it failed. A panic is not a failure: it fails t.
+// failed runs scenario and reports whether it failed.
 func failed(t *testing.T, scenario func(tb testing.TB)) bool {
 	t.Helper()
 
-	f := run(t, scenario)
-	require.Nil(t, f.panicked, "the scenario panicked instead of failing")
-
-	return f.Failed()
+	return run(t, scenario).Failed()
 }
 
 func TestThen(t *testing.T) {
@@ -239,7 +233,6 @@ func TestThenRejectsANilArgument(t *testing.T) {
 				tc.then(testdsl.Test(tb).Given(Pinger{}).When(Ping{Fail: true}))
 			})
 
-			require.Nil(t, f.panicked, "the scenario panicked instead of failing")
 			assert.True(t, f.stopped)
 			assert.Contains(t, strings.Join(f.errors, "\n"), tc.want)
 		})
@@ -335,7 +328,6 @@ func TestGivenRejectsANilUseCase(t *testing.T) {
 				testdsl.Test(tb).Given(useCase).When(Ping{}).Then(Pong{OK: true})
 			})
 
-			require.Nil(t, f.panicked, "the scenario panicked instead of failing")
 			assert.True(t, f.stopped)
 			require.Len(t, f.errors, 1)
 			assert.Contains(t, f.errors[0], "testdsl: Given needs a use case, got nil")

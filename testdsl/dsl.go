@@ -60,7 +60,8 @@ func (s *Scenario) Given[Req, Res any](useCase interactor.UseCase[Req, Res]) *Gi
 
 // WithContext returns a copy of g whose use case runs under ctx instead of the test's context, for
 // use cases that read values such as the current user from it. g itself is unchanged, so it can
-// start other scenarios. ctx is passed as given, nil included.
+// start other scenarios in the same test; a Given reports to the test that created it, so build a
+// new one in each subtest. ctx is passed as given, nil included.
 func (g *Given[Req, Res]) WithContext(ctx context.Context) *Given[Req, Res] {
 	c := *g
 	c.ctx = ctx

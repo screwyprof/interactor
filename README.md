@@ -175,7 +175,7 @@ v3 replaces the reflection-based API with generics. Most of what v2 checked at r
 | `UseCaseRunner`, `UseCaseRunnerFn` | `UseCase[Req, Res]`, `UseCaseFunc[Req, Res]` |
 | code depending on `UseCaseRunner` to accept the dispatcher | `*interactor.Dispatcher`, or an interface you define for the use case you need: a generic method can't satisfy an interface, so the dispatcher no longer implements one |
 | `interactor.NewDispatcher()` | `var d interactor.Dispatcher` |
-| `d.Register(Req{}, interactor.MustAdapt(uc))` | `d.MustRegister(uc)` once `Run` has the v3 shape, or `d.MustRegister(interactor.FromOutParam(uc.Run))` unchanged |
+| `d.Register(Req{}, interactor.MustAdapt(uc))` | `d.MustRegister(uc)` once `Run` has the v3 shape, or `d.MustRegister(interactor.FromOutParam(uc.Run))` unchanged; v2 rejected a nil `*T` here, v3 fails on its first `Dispatch`, so check `uc` first |
 | `d.Register(Req{}, interactor.Must(interactor.Func(fn)))` | `d.MustRegister(interactor.FromOutParam(fn))` unchanged, or `interactor.UseCaseFunc[Req, Res](fn)` once `fn` returns its response |
 | `var res Res; err := d.Run(ctx, req, &res)` | `res, err := d.Dispatch[Res](ctx, req)` |
 | a request held in `any` was routed by its dynamic type | routing uses the static type: pass the concrete request |

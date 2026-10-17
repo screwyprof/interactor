@@ -44,7 +44,7 @@ runs a line without checking what it does is worse than no test.
 
 ### Examples compile
 
-Every Go snippet in the [README](Readme.md) has to compile against the current API, and the
+Every Go snippet in the [README](README.md) has to compile against the current API, and the
 `Example` functions in the tests are what pkg.go.dev shows, so they run as tests with checked
 output. Change the API, change both.
 
