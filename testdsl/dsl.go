@@ -5,16 +5,16 @@
 //	func TestGreet(t *testing.T) {
 //		testdsl.Test(t).
 //			Given(Greet{}).
-//			When(Hello{Name: "Gopher"}).
+//			When(t.Context(), Hello{Name: "Gopher"}).
 //			Then(Greeting{Text: "Hello, Gopher!"})
 //	}
 //
 // Given fixes the request and response types for the rest of the chain, so When only accepts the
 // use case's request and Then only its response: a mismatched expectation does not compile.
 // [When.ThenFailWith] expects an error instead, and [When.ThenCheck] runs a check of your own.
-// [Given.WithContext] runs the use case under a context of your own instead of the test's.
 //
-// It uses testify, which your tests then depend on too.
+// Like any assertion library, testdsl checks only what a scenario asks for: end each one with a
+// Then method. It uses testify, which your tests then depend on too.
 package testdsl
 
 import (
@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/screwyprof/interactor/v3"
-	"github.com/screwyprof/interactor/v3/internal/nilcheck"
 )
 
 // Scenario starts a test. Create one with [Test].
@@ -44,83 +43,40 @@ func Test(tb testing.TB) *Scenario {
 type Given[Req, Res any] struct {
 	tb      testing.TB
 	useCase interactor.UseCase[Req, Res]
-	ctx     context.Context //nolint:containedctx // the test's, or WithContext's: carried to When.
 }
 
-// Given sets the use case under test. A nil use case fails the test.
+// Given sets the use case under test.
 func (s *Scenario) Given[Req, Res any](useCase interactor.UseCase[Req, Res]) *Given[Req, Res] {
-	s.tb.Helper()
-
-	if nilcheck.IsNil(useCase) {
-		require.FailNow(s.tb, "testdsl: Given needs a use case, got nil")
-	}
-
-	return &Given[Req, Res]{tb: s.tb, useCase: useCase, ctx: s.tb.Context()}
-}
-
-// WithContext returns a copy of g whose use case runs under ctx instead of the test's context, for
-// use cases that read values such as the current user from it. g itself is unchanged, so it can
-// start other scenarios in the same test; a Given reports to the test that created it, so build a
-// new one in each subtest. ctx is passed as given, nil included.
-func (g *Given[Req, Res]) WithContext(ctx context.Context) *Given[Req, Res] {
-	c := *g
-	c.ctx = ctx
-
-	return &c
+	return &Given[Req, Res]{tb: s.tb, useCase: useCase}
 }
 
 // When is a scenario whose use case has run, holding what it returned.
 type When[Res any] struct {
-	tb      testing.TB
-	got     Res
-	err     error
-	checked *bool
+	tb  testing.TB
+	got Res
+	err error
 }
 
-// When runs the use case with req, under the test's context unless WithContext set one. The
-// scenario must end with one of the Then methods, or the test fails at the line that called When,
-// unless it is skipped. Call When and Then from the test's goroutine, as for any test that can
-// fail. testdsl is for tests: each scenario is kept until the test ends, so in benchmarks call the
-// use case directly.
-func (g *Given[Req, Res]) When(req Req) *When[Res] {
-	g.tb.Helper()
+// When runs the use case with ctx and req. Call When and Then from the test's goroutine, as for
+// any test that can fail.
+func (g *Given[Req, Res]) When(ctx context.Context, req Req) *When[Res] {
+	got, err := g.useCase.Run(ctx, req)
 
-	got, err := g.useCase.Run(g.ctx, req)
-
-	// The flag has its own allocation so the cleanup below keeps only it alive, not the result.
-	tb, checked := g.tb, new(bool)
-
-	// Marked as a helper, the cleanup is reported at the line that called When, honouring the
-	// caller's own t.Helper() marks.
-	tb.Cleanup(func() {
-		tb.Helper()
-
-		if !*checked && !tb.Skipped() {
-			tb.Errorf("testdsl: scenario has no Then, ThenFailWith or ThenCheck")
-		}
-	})
-
-	return &When[Res]{tb: tb, got: got, err: err, checked: checked}
+	return &When[Res]{tb: g.tb, got: got, err: err}
 }
 
 // Then expects the use case to have succeeded and returned want.
 func (w *When[Res]) Then(want Res) {
 	w.tb.Helper()
-	*w.checked = true
 
 	require.NoError(w.tb, w.err)
 	assert.Equal(w.tb, want, w.got)
 }
 
 // ThenFailWith expects the use case to have failed with an error matching want, as by [errors.Is].
-// want must not be nil.
+// A nil want never passes: the use case must have failed.
 func (w *When[Res]) ThenFailWith(want error) {
 	w.tb.Helper()
-	*w.checked = true
-
-	if want == nil {
-		require.FailNow(w.tb, "testdsl: ThenFailWith needs the error to expect, got nil")
-	}
 
 	require.Error(w.tb, w.err)
 	require.ErrorIs(w.tb, w.err, want)
@@ -130,11 +86,6 @@ func (w *When[Res]) ThenFailWith(want error) {
 // not cover.
 func (w *When[Res]) ThenCheck(check func(tb testing.TB, got Res, err error)) {
 	w.tb.Helper()
-	*w.checked = true
-
-	if check == nil {
-		require.FailNow(w.tb, "testdsl: ThenCheck needs a check, got nil")
-	}
 
 	check(w.tb, w.got, w.err)
 }

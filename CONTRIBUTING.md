@@ -71,7 +71,6 @@ does. `make check` passing is the floor rather than the case for the change.
 | --- | --- |
 | root package `interactor` | `UseCase`, `UseCaseFunc` and `Dispatcher` |
 | `testdsl` | the public Given/When/Then helpers for testing use cases |
-| `internal/nilcheck` | the one definition of a nil use case, shared by both |
 
 ## Conventions
 

@@ -4,19 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"os/exec"
 	"runtime"
 	"runtime/debug"
-	"slices"
-	"strings"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/screwyprof/interactor/v3"
 	"github.com/screwyprof/interactor/v3/testdsl"
 )
 
@@ -46,11 +41,8 @@ func (p Pinger) Run(ctx context.Context, req Ping) (Pong, error) {
 type fakeTB struct {
 	testing.TB // methods the DSL must not call panic through the nil interface
 
-	ctx      context.Context //nolint:containedctx // a fake TB has to return a context from Context().
-	errors   []string        // every failure message, in order
-	stopped  bool            // FailNow was called
-	skipped  bool            // SkipNow was called
-	cleanups []func()
+	errors  []string // every failure message, in order
+	stopped bool     // FailNow was called
 }
 
 func (f *fakeTB) Helper() {}
@@ -69,26 +61,13 @@ func (f *fakeTB) FailNow() {
 
 func (f *fakeTB) Failed() bool { return len(f.errors) > 0 || f.stopped }
 
-func (f *fakeTB) SkipNow() {
-	f.skipped = true
-
-	runtime.Goexit()
-}
-
-func (f *fakeTB) Skipped() bool { return f.skipped }
-
-func (f *fakeTB) Cleanup(fn func()) { f.cleanups = append(f.cleanups, fn) }
-
-func (f *fakeTB) Context() context.Context { return f.ctx }
-
-// run runs scenario against a fakeTB on its own goroutine, as testing.T would, then its cleanups.
-// Waiting for the goroutine orders its writes to f before the reads here, so f needs no lock. A
-// panic is kept apart from the failures, so a test expecting the DSL to fail cannot pass because
-// it crashed instead.
+// run runs scenario against a fakeTB on its own goroutine, as testing.T would. Waiting for the
+// goroutine orders its writes to f before the reads here, so f needs no lock. A panic is kept
+// apart from the failures, so a test expecting the DSL to fail cannot pass because it crashed.
 func run(t *testing.T, scenario func(tb testing.TB)) *fakeTB {
 	t.Helper()
 
-	f := &fakeTB{ctx: t.Context()}
+	f := &fakeTB{}
 
 	var (
 		wg       sync.WaitGroup
@@ -108,10 +87,6 @@ func run(t *testing.T, scenario func(tb testing.TB)) *fakeTB {
 
 	require.Empty(t, panicked, "the scenario panicked instead of failing")
 
-	for _, cleanup := range slices.Backward(f.cleanups) {
-		cleanup()
-	}
-
 	return f
 }
 
@@ -125,316 +100,108 @@ func failed(t *testing.T, scenario func(tb testing.TB)) bool {
 func TestThen(t *testing.T) {
 	t.Parallel()
 
-	t.Run("passes on the expected response", func(t *testing.T) {
-		t.Parallel()
+	cases := map[string]struct {
+		when Ping
+		then Pong
+		fail bool
+	}{
+		"passes on the expected response": {when: Ping{}, then: Pong{OK: true}},
+		"fails on a different response":   {when: Ping{}, then: Pong{OK: false}, fail: true},
+		"fails when the use case errors":  {when: Ping{Fail: true}, then: Pong{}, fail: true},
+	}
 
-		assert.False(t, failed(t, func(tb testing.TB) {
-			tb.Helper()
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{}).Then(Pong{OK: true})
-		}))
-	})
+			assert.Equal(t, tc.fail, failed(t, func(tb testing.TB) {
+				tb.Helper()
 
-	t.Run("fails on a different response", func(t *testing.T) {
-		t.Parallel()
-
-		assert.True(t, failed(t, func(tb testing.TB) {
-			tb.Helper()
-
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{}).Then(Pong{OK: false})
-		}))
-	})
-
-	t.Run("fails when the use case errors", func(t *testing.T) {
-		t.Parallel()
-
-		assert.True(t, failed(t, func(tb testing.TB) {
-			tb.Helper()
-
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{Fail: true}).Then(Pong{})
-		}))
-	})
+				testdsl.Test(tb).Given(Pinger{}).When(t.Context(), tc.when).Then(tc.then)
+			}))
+		})
+	}
 }
 
 func TestThenFailWith(t *testing.T) {
 	t.Parallel()
 
-	t.Run("passes on the expected error", func(t *testing.T) {
-		t.Parallel()
+	cases := map[string]struct {
+		when Ping
+		want error
+		fail bool
+	}{
+		"passes on the expected error": {when: Ping{Fail: true}, want: errBoom},
+		"fails on a different error": {
+			when: Ping{Fail: true},
+			want: errors.New("other"),
+			fail: true,
+		},
+		"fails when the use case succeeds":              {when: Ping{}, want: errBoom, fail: true},
+		"fails when the use case succeeds and want nil": {when: Ping{}, want: nil, fail: true},
+		"fails when the use case errors and want nil":   {when: Ping{Fail: true}, want: nil, fail: true},
+	}
 
-		assert.False(t, failed(t, func(tb testing.TB) {
-			tb.Helper()
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{Fail: true}).ThenFailWith(errBoom)
-		}))
-	})
+			assert.Equal(t, tc.fail, failed(t, func(tb testing.TB) {
+				tb.Helper()
 
-	t.Run("fails on a different error", func(t *testing.T) {
-		t.Parallel()
-
-		assert.True(t, failed(t, func(tb testing.TB) {
-			tb.Helper()
-
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{Fail: true}).ThenFailWith(errors.New("other"))
-		}))
-	})
-
-	t.Run("fails when the use case succeeds", func(t *testing.T) {
-		t.Parallel()
-
-		assert.True(t, failed(t, func(tb testing.TB) {
-			tb.Helper()
-
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{}).ThenFailWith(errBoom)
-		}))
-	})
+				testdsl.Test(tb).Given(Pinger{}).When(t.Context(), tc.when).ThenFailWith(tc.want)
+			}))
+		})
+	}
 }
 
 func TestThenCheck(t *testing.T) {
 	t.Parallel()
 
-	t.Run("hands over the scenario's TB and the typed result", func(t *testing.T) {
-		t.Parallel()
-
-		var (
-			gotTB  testing.TB
-			gotRes Pong
-		)
-
-		f := run(t, func(tb testing.TB) {
-			tb.Helper()
-
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{}).ThenCheck(func(tb testing.TB, res Pong, _ error) {
-				tb.Helper()
-
-				gotTB, gotRes = tb, res
-			})
-		})
-
-		assert.False(t, f.Failed())
-		assert.Same(t, f, gotTB)
-		assert.Equal(t, Pong{OK: true}, gotRes)
-	})
-}
-
-func TestThenRejectsANilArgument(t *testing.T) {
-	t.Parallel()
-
-	cases := map[string]struct {
-		then func(w *testdsl.When[Pong])
-		want string
-	}{
-		"ThenFailWith": {func(w *testdsl.When[Pong]) { w.ThenFailWith(nil) }, "ThenFailWith needs the error to expect"},
-		"ThenCheck":    {func(w *testdsl.When[Pong]) { w.ThenCheck(nil) }, "ThenCheck needs a check"},
-	}
-
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			f := run(t, func(tb testing.TB) {
-				tb.Helper()
-
-				tc.then(testdsl.Test(tb).Given(Pinger{}).When(Ping{Fail: true}))
-			})
-
-			assert.True(t, f.stopped)
-			assert.Contains(t, strings.Join(f.errors, "\n"), tc.want)
-		})
-	}
-}
-
-func TestFailingThenReportsOnce(t *testing.T) {
-	t.Parallel()
+	var (
+		gotTB  testing.TB
+		gotRes Pong
+	)
 
 	f := run(t, func(tb testing.TB) {
 		tb.Helper()
 
-		testdsl.Test(tb).Given(Pinger{}).When(Ping{}).Then(Pong{OK: false})
-	})
-
-	require.Len(t, f.errors, 1, "a failing Then must not also report a missing Then")
-}
-
-func TestMissingThen(t *testing.T) {
-	t.Parallel()
-
-	const missing = "testdsl: scenario has no Then, ThenFailWith or ThenCheck"
-
-	t.Run("is reported", func(t *testing.T) {
-		t.Parallel()
-
-		f := run(t, func(tb testing.TB) {
+		testdsl.Test(tb).Given(Pinger{}).When(t.Context(), Ping{}).ThenCheck(func(tb testing.TB, res Pong, _ error) {
 			tb.Helper()
 
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{})
+			gotTB, gotRes = tb, res
 		})
-
-		assert.Equal(t, []string{missing}, f.errors)
-	})
-
-	t.Run("is reported even after an earlier failure", func(t *testing.T) {
-		t.Parallel()
-
-		f := run(t, func(tb testing.TB) {
-			tb.Helper()
-
-			tb.Errorf("earlier failure")
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{})
-		})
-
-		assert.Equal(t, []string{"earlier failure", missing}, f.errors)
-	})
-
-	t.Run("is reported when the test stopped before its Then", func(t *testing.T) {
-		t.Parallel()
-
-		f := run(t, func(tb testing.TB) {
-			tb.Helper()
-
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{})
-			tb.FailNow()
-		})
-
-		assert.Equal(t, []string{missing}, f.errors)
-	})
-
-	t.Run("is not reported when the test was skipped", func(t *testing.T) {
-		t.Parallel()
-
-		f := run(t, func(tb testing.TB) {
-			tb.Helper()
-
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{})
-			tb.SkipNow()
-		})
-
-		assert.True(t, f.skipped)
-		assert.Empty(t, f.errors)
-	})
-}
-
-func TestGivenRejectsANilUseCase(t *testing.T) {
-	t.Parallel()
-
-	nilUseCases := map[string]interactor.UseCase[Ping, Pong]{
-		"nil interface": nil,
-		"nil pointer":   (*Pinger)(nil),
-		"nil func":      interactor.UseCaseFunc[Ping, Pong](nil),
-	}
-
-	for name, useCase := range nilUseCases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			f := run(t, func(tb testing.TB) {
-				tb.Helper()
-
-				testdsl.Test(tb).Given(useCase).When(Ping{}).Then(Pong{OK: true})
-			})
-
-			assert.True(t, f.stopped)
-			require.Len(t, f.errors, 1)
-			assert.Contains(t, f.errors[0], "testdsl: Given needs a use case, got nil")
-		})
-	}
-}
-
-func TestWhenContext(t *testing.T) {
-	t.Parallel()
-
-	derived := context.WithoutCancel(t.Context())
-
-	var nilCtx context.Context // a nil context is one of the cases under test
-
-	cases := map[string]struct {
-		given func(g *testdsl.Given[Ping, Pong]) *testdsl.Given[Ping, Pong]
-		want  func(f *fakeTB) context.Context
-	}{
-		"is the test's context by default": {
-			given: func(g *testdsl.Given[Ping, Pong]) *testdsl.Given[Ping, Pong] { return g },
-			want:  func(f *fakeTB) context.Context { return f.ctx },
-		},
-		"is the one given WithContext": {
-			given: func(g *testdsl.Given[Ping, Pong]) *testdsl.Given[Ping, Pong] { return g.WithContext(derived) },
-			want:  func(*fakeTB) context.Context { return derived },
-		},
-		"is nil when WithContext was given nil": {
-			given: func(g *testdsl.Given[Ping, Pong]) *testdsl.Given[Ping, Pong] { return g.WithContext(nilCtx) },
-			want:  func(*fakeTB) context.Context { return nil },
-		},
-	}
-
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
-			var gotCtx context.Context
-
-			f := run(t, func(tb testing.TB) {
-				tb.Helper()
-
-				tc.given(testdsl.Test(tb).Given(Pinger{gotCtx: &gotCtx})).When(Ping{}).Then(Pong{OK: true})
-			})
-
-			assert.False(t, f.Failed())
-			assert.Equal(t, tc.want(f), gotCtx)
-		})
-	}
-}
-
-func TestWithContextLeavesTheGivenUnchanged(t *testing.T) {
-	t.Parallel()
-
-	var gotCtx context.Context
-
-	other := context.WithoutCancel(t.Context())
-
-	f := run(t, func(tb testing.TB) {
-		tb.Helper()
-
-		given := testdsl.Test(tb).Given(Pinger{gotCtx: &gotCtx})
-		given.WithContext(other).When(Ping{}).Then(Pong{OK: true})
-		given.When(Ping{}).Then(Pong{OK: true})
 	})
 
 	assert.False(t, f.Failed())
-	assert.Equal(t, f.ctx, gotCtx, "the second When must run under the test's context again")
+	assert.Same(t, f, gotTB, "the check gets the scenario's TB")
+	assert.Equal(t, Pong{OK: true}, gotRes)
 }
 
-// TestMissingThenIsReportedAtTheCallersLine re-runs this test binary to run
-// TestMissingThenInRealTest, because only a real *testing.T shows which line the report lands on.
-func TestMissingThenIsReportedAtTheCallersLine(t *testing.T) {
+func TestWhenRunsTheUseCaseUnderTheGivenContext(t *testing.T) {
 	t.Parallel()
 
-	source, err := os.ReadFile("dsl_test.go")
-	require.NoError(t, err)
+	var nilCtx context.Context // a nil context is passed through like any other
 
-	// The marker appears twice: in this lookup, and on the scenario line it marks.
-	const marker = "// the scenario the report must point at"
-	require.Equal(t, 2, strings.Count(string(source), marker), "marker comment missing or duplicated")
-
-	at := strings.LastIndex(string(source), marker)
-
-	line := strings.Count(string(source[:at]), "\n") + 1
-
-	// Only -test.run: the parent's own flags, such as -test.coverprofile, must not reach the child.
-	child := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestMissingThenInRealTest$", "-test.count=1")
-
-	child.Env = append(os.Environ(), "INTERACTOR_TESTDSL_MISSING_THEN_CHILD=1")
-
-	out, err := child.CombinedOutput()
-
-	require.Error(t, err, "the child test must fail")
-	assert.Contains(t, string(out), fmt.Sprintf("dsl_test.go:%d: testdsl: scenario has no Then", line), string(out))
-}
-
-func TestMissingThenInRealTest(t *testing.T) {
-	t.Parallel()
-
-	if os.Getenv("INTERACTOR_TESTDSL_MISSING_THEN_CHILD") != "1" {
-		t.Skip("run by TestMissingThenIsReportedAtTheCallersLine")
+	cases := map[string]context.Context{
+		"a context":     context.WithoutCancel(t.Context()),
+		"a nil context": nilCtx,
 	}
 
-	testdsl.Test(t).Given(Pinger{}).When(Ping{}) // the scenario the report must point at
+	for name, ctx := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			gotCtx := t.Context()
+
+			f := run(t, func(tb testing.TB) {
+				tb.Helper()
+
+				testdsl.Test(tb).Given(Pinger{gotCtx: &gotCtx}).When(ctx, Ping{}).Then(Pong{OK: true})
+			})
+
+			assert.False(t, f.Failed())
+			assert.Equal(t, ctx, gotCtx)
+		})
+	}
 }

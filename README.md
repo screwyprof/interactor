@@ -105,7 +105,7 @@ import "github.com/screwyprof/interactor/v3/testdsl"
 func TestGreet(t *testing.T) {
 	testdsl.Test(t).
 		Given(Greet{}).
-		When(Hello{Name: "Gopher"}).
+		When(t.Context(), Hello{Name: "Gopher"}).
 		Then(Greeting{Text: "Hello, Gopher!"})
 }
 ```
@@ -118,7 +118,7 @@ Expect an error with `ThenFailWith`, which matches like `errors.Is`. Say `Greet`
 func TestGreetRejectsAnEmptyName(t *testing.T) {
 	testdsl.Test(t).
 		Given(Greet{}).
-		When(Hello{}).
+		When(t.Context(), Hello{}).
 		ThenFailWith(ErrNoName)
 }
 ```
@@ -129,7 +129,7 @@ For anything else, `ThenCheck` hands you the typed result:
 func TestGreetMentionsTheName(t *testing.T) {
 	testdsl.Test(t).
 		Given(Greet{}).
-		When(Hello{Name: "Gopher"}).
+		When(t.Context(), Hello{Name: "Gopher"}).
 		ThenCheck(func(tb testing.TB, got Greeting, err error) {
 			require.NoError(tb, err)
 			assert.Contains(tb, got.Text, "Gopher")
@@ -157,13 +157,13 @@ func TestGreetScenarios(t *testing.T) {
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			tc.then(testdsl.Test(t).Given(Greet{}).When(tc.when))
+			tc.then(testdsl.Test(t).Given(Greet{}).When(t.Context(), tc.when))
 		})
 	}
 }
 ```
 
-`When` runs the use case under the test's context (`t.Context()`); for a use case that reads values such as the current user from its context, add `.WithContext(ctx)` before `When`. A scenario that never reaches a `Then` fails the test at the line that called `When`, unless the test is skipped. `testdsl` uses [testify](https://github.com/stretchr/testify), so your tests depend on it too.
+`When` takes the context the use case runs under, usually `t.Context()`, or one carrying values such as the current user. As with any assertion library, a scenario checks only what it asks for, so end each one with a `Then` method. `testdsl` uses [testify](https://github.com/stretchr/testify), so your tests depend on it too.
 
 ## Migrating from v2
 
@@ -184,7 +184,7 @@ v3 replaces the reflection-based API with generics. Most of what v2 checked at r
 | `ErrUseCaseRunnerNotFound` | `ErrUseCaseNotFound` |
 | `ErrResultTypeMismatch` | `*ResponseTypeError` |
 | `Request`, `Response`, `Func`, `Adapt`, `Must`, `MustAdapt` and their runtime errors (`ErrRequestTypeMismatch`, `ErrInvalidReturnType`, …) | removed: the compiler checks what they checked at runtime |
-| `testdsl.Test(t)(Given(r), When(ctx, req, &res), Then(want))` and its `InteractorTester`, `GivenFn`, `WhenFn`, `ThenFn`, `Checker` types | `testdsl.Test(t).Given(uc).When(req).Then(want)`, checked at compile time; a custom context goes in `.WithContext(ctx)`; `ThenFailWith(err)` now needs a non-nil error and stops the test on a mismatch |
+| `testdsl.Test(t)(Given(r), When(ctx, req, &res), Then(want))` and its `InteractorTester`, `GivenFn`, `WhenFn`, `ThenFn`, `Checker` types | `testdsl.Test(t).Given(uc).When(ctx, req).Then(want)`, checked at compile time; `When` takes the context as before but no `&res`; `ThenFailWith(err)` now needs a non-nil error and stops the test on a mismatch |
 
 To move one use case at a time, wrap a v2-style `Run` in a `UseCaseFunc` and register that:
 

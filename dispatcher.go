@@ -7,8 +7,6 @@ import (
 	"reflect"
 	"sync"
 	"sync/atomic"
-
-	"github.com/screwyprof/interactor/v3/internal/nilcheck"
 )
 
 // Dispatcher routes a request to the use case registered for its type.
@@ -38,7 +36,7 @@ type entry struct {
 func (d *Dispatcher) Register[Req, Res any](uc UseCase[Req, Res]) error {
 	reqType := reflect.TypeFor[Req]()
 
-	if nilcheck.IsNil(uc) {
+	if isNil(uc) {
 		return fmt.Errorf("%w: %v", ErrNilUseCase, reqType)
 	}
 
@@ -115,4 +113,16 @@ func (d *Dispatcher) MustRegister[Req, Res any](uc UseCase[Req, Res]) {
 	if err := d.Register(uc); err != nil {
 		panic(err)
 	}
+}
+
+// isNil reports whether uc is a nil interface, nil pointer or nil func. These are rejected at
+// registration rather than left to fail inside Dispatch.
+func isNil(uc any) bool {
+	if uc == nil {
+		return true
+	}
+
+	v := reflect.ValueOf(uc)
+
+	return (v.Kind() == reflect.Pointer || v.Kind() == reflect.Func) && v.IsNil()
 }

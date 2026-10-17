@@ -15,7 +15,7 @@ func TestUseCaseFunc(t *testing.T) {
 
 	testdsl.Test(t).
 		Given(interactor.UseCaseFunc[Question, Answer](AnswerQuestion{}.Run)).
-		When(Question{ID: 21}).
+		When(t.Context(), Question{ID: 21}).
 		Then(Answer{Value: 42})
 }
 
