@@ -61,6 +61,19 @@ func TestDispatch(t *testing.T) {
 		require.ErrorIs(t, err, interactor.ErrUseCaseNotFound)
 	})
 
+	t.Run("routes by the request's static type, not one held in an interface", func(t *testing.T) {
+		t.Parallel()
+
+		var d interactor.Dispatcher
+		d.MustRegister(AnswerQuestion{})
+
+		var req any = Question{ID: 1}
+
+		_, err := d.Dispatch[Answer](t.Context(), req)
+
+		require.ErrorIs(t, err, interactor.ErrUseCaseNotFound)
+	})
+
 	t.Run("fails when asked for a different response type", func(t *testing.T) {
 		t.Parallel()
 
@@ -129,6 +142,7 @@ func TestRegister(t *testing.T) {
 			err := d.Register(tc.useCase)
 
 			require.ErrorIs(t, err, interactor.ErrNilUseCase)
+			assert.ErrorContains(t, err, "interactor_test.Question", "the error names the registration")
 		})
 	}
 }

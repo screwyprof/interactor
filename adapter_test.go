@@ -1,6 +1,7 @@
 package interactor_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -41,16 +42,57 @@ func TestFromOutParam(t *testing.T) {
 	})
 }
 
-func TestUseCaseFuncWithCustomCheck(t *testing.T) {
+func TestFromOutParamReturnsNoPartialResponseOnError(t *testing.T) {
 	t.Parallel()
 
-	testdsl.Test(t).
-		Given(interactor.UseCaseFunc[Question, Answer](AnswerQuestion{}.Run)).
-		When(Question{ID: 5}).
-		ThenCheck(func(tb testing.TB, got Answer, err error) {
-			tb.Helper()
+	halfDone := func(_ context.Context, _ Question, res *Answer) error {
+		res.Value = 99 // written before failing
 
-			require.NoError(tb, err)
-			assert.Positive(tb, got.Value)
-		})
+		return errBoom
+	}
+
+	got, err := interactor.FromOutParam(halfDone).Run(t.Context(), Question{})
+
+	require.ErrorIs(t, err, errBoom)
+	assert.Zero(t, got, "a failed use case's response must not leak through")
 }
+
+func TestUseCasesRunUnderTheCallersContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.WithValue(t.Context(), ctxKey{}, "marker")
+
+	readCtx := func(ctx context.Context, _ Question) (Answer, error) {
+		v, _ := ctx.Value(ctxKey{}).(string)
+		if v != "marker" {
+			return Answer{}, errBoom
+		}
+
+		return Answer{Value: 1}, nil
+	}
+	readCtxOutParam := func(ctx context.Context, q Question, res *Answer) error {
+		got, err := readCtx(ctx, q)
+		*res = got
+
+		return err
+	}
+
+	t.Run("through Dispatch", func(t *testing.T) {
+		t.Parallel()
+
+		var d interactor.Dispatcher
+		d.MustRegister(interactor.UseCaseFunc[Question, Answer](readCtx))
+
+		_, err := d.Dispatch[Answer](ctx, Question{})
+		require.NoError(t, err)
+	})
+
+	t.Run("through FromOutParam", func(t *testing.T) {
+		t.Parallel()
+
+		_, err := interactor.FromOutParam(readCtxOutParam).Run(ctx, Question{})
+		require.NoError(t, err)
+	})
+}
+
+type ctxKey struct{}

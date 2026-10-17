@@ -33,11 +33,11 @@ func NewDispatcher() *Dispatcher {
 // Request types match exactly: Req and *Req are different types. It returns [ErrNilUseCase] for
 // a nil use case and [ErrAlreadyRegistered] if Req already has one.
 func (d *Dispatcher) Register[Req, Res any](uc UseCase[Req, Res]) error {
-	if isNil(uc) {
-		return ErrNilUseCase
-	}
-
 	reqType := reflect.TypeFor[Req]()
+
+	if isNil(uc) {
+		return fmt.Errorf("%w: %v", ErrNilUseCase, reqType)
+	}
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
