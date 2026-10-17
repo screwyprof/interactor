@@ -36,7 +36,7 @@ lint-annotate:
 
 test: ## run all tests
 	@echo -e "$(OK_COLOR)--> Running unit tests$(NO_COLOR)"
-	go test -v --race --count=1 -coverpkg=./... -coverprofile=coverage.out ./...
+	go test -race -count=1 -shuffle=on -timeout=120s -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 
 coverage: test ## show test coverage report
 	@echo -e "$(OK_COLOR)--> Showing test coverage$(NO_COLOR)"
