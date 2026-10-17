@@ -17,6 +17,8 @@ REVIEWDOG_VERSION := v0.21.2
 GOVULNCHECK_VERSION := v1.9.0
 # renovate: datasource=go depName=github.com/screwyprof/prettycov
 PRETTYCOV_VERSION := v0.16.0
+# renovate: datasource=go depName=github.com/go-gremlins/gremlins
+GREMLINS_VERSION := v0.6.0
 
 GOLANGCI := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 PRETTYCOV := go run github.com/screwyprof/prettycov/cmd/prettycov@$(PRETTYCOV_VERSION)
@@ -69,6 +71,17 @@ vulns: ## report known vulnerabilities reachable from this module
 	@echo -e "$(OK_COLOR)==> Vulnerabilities$(NO_COLOR)"
 	@go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
+# Coverage says a line ran; mutation testing says whether a test would notice it being wrong.
+# gremlins flips conditions and arithmetic and reports the mutants no test killed. It works on a
+# copy of the module root, so only tracked files go in, not whatever else the checkout holds.
+mutate: ## report mutants the tests failed to kill
+	@echo -e "$(OK_COLOR)==> Mutation testing$(NO_COLOR)"
+	@test -n "$(GO_FILES)" || { echo "no Go files; this needs a git checkout"; exit 1; }
+	@tmp=$$(mktemp -d) && trap 'rm -rf "$$tmp"' EXIT; \
+	 git -c core.quotePath=false ls-files -co --exclude-standard | tar -cf - -T - | (cd "$$tmp" && tar -xf -); \
+	 (cd "$$tmp" && go run github.com/go-gremlins/gremlins/cmd/gremlins@$(GREMLINS_VERSION) \
+		unleash --timeout-coefficient=30 .)
+
 test: ## run all tests and write the coverage profile
 	@echo -e "$(OK_COLOR)==> Running tests$(NO_COLOR)"
 	go test -race -count=1 -shuffle=on -timeout=120s -covermode=atomic -coverpkg=./... -coverprofile=$(COVERAGE) ./...
@@ -96,6 +109,8 @@ check: ## run every quality gate
 	@$(MAKE) --no-print-directory tidy && echo "go.mod and go.sum are tidy"
 	@echo; echo '$$ make vulns'
 	@$(call summarise,vulns,No vulnerabilities|Vulnerability #)
+	@echo; echo '$$ make mutate'
+	@$(call summarise,mutate,^(Killed:|Test efficacy:))
 
 clean: ## remove build artifacts and generated files
 	@echo -e "$(OK_COLOR)==> Cleaning up$(NO_COLOR)"
@@ -107,4 +122,4 @@ help: ## show this help screen
 # To avoid unintended conflicts with file names, always add to .PHONY
 # unless there is a reason not to.
 # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
-.PHONY: all fmt lint lint-all lint-fix lint-annotate tidy vulns test coverage check clean help
+.PHONY: all fmt lint lint-all lint-fix lint-annotate tidy vulns mutate test coverage check clean help

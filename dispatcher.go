@@ -55,7 +55,7 @@ func (d *Dispatcher) Register[Req, Res any](uc UseCase[Req, Res]) error {
 	}
 
 	// Copy on write: dispatching reads the published map without a lock, so it is never modified.
-	next := make(map[reflect.Type]entry, len(current)+1)
+	next := make(map[reflect.Type]entry, len(current))
 	maps.Copy(next, current)
 	next[reqType] = entry{useCase: uc, response: reflect.TypeFor[Res]()}
 
