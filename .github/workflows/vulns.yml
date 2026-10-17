@@ -1,0 +1,28 @@
+name: Vulnerabilities
+
+# Advisories land whether or not anyone pushes, so this runs on a schedule rather than on push.
+# GitHub disables a schedule after 60 days without repository activity; re-enable it from the
+# notification.
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  vulns:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - run: make vulns

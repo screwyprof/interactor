@@ -1,7 +1,6 @@
 # Interactor
 
-[![Build Status](https://github.com/screwyprof/interactor/actions/workflows/go.yml/badge.svg)](https://github.com/screwyprof/interactor/actions/workflows/go.yml)
-[![codecov](https://codecov.io/gh/screwyprof/interactor/branch/main/graph/badge.svg)](https://codecov.io/gh/screwyprof/interactor)
+[![codecov](https://codecov.io/gh/screwyprof/interactor/graph/badge.svg)](https://codecov.io/gh/screwyprof/interactor) [![Go](https://github.com/screwyprof/interactor/actions/workflows/go.yml/badge.svg)](https://github.com/screwyprof/interactor/actions/workflows/go.yml) [![Vulnerabilities](https://github.com/screwyprof/interactor/actions/workflows/vulns.yml/badge.svg)](https://github.com/screwyprof/interactor/actions/workflows/vulns.yml) [![Release](https://img.shields.io/github/v/release/screwyprof/interactor)](https://github.com/screwyprof/interactor/releases/latest) [![Go Reference](https://pkg.go.dev/badge/github.com/screwyprof/interactor/v2.svg)](https://pkg.go.dev/github.com/screwyprof/interactor/v2) [![License](https://img.shields.io/github/license/screwyprof/interactor)](LICENSE)
 
 `Interactor` is a simple and efficient Go package for managing and dispatching requests to the appropriate use cases according to their request types. It is inspired by Uncle Bob's [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) and the interactor concept described therein.
 
