@@ -11,9 +11,9 @@ make check
 ```
 
 Every tool the build reaches for is a Go program fetched at its pinned version by `go run`:
-golangci-lint, reviewdog, govulncheck and prettycov. Never from your PATH, so everyone runs the same
-versions as CI. The first `make check` compiles them, so it is slow once and fast after. Renovate
-keeps the pins in the [Makefile](Makefile) up to date.
+golangci-lint, reviewdog, govulncheck, prettycov and gremlins. Never from your PATH, so everyone
+runs the same versions as CI. The first `make check` compiles them, so it is slow once and fast
+after. Renovate keeps the pins in the [Makefile](Makefile) up to date.
 
 The git pre-commit hooks are optional. They need `pre-commit`, which is Python rather than Go: run
 `pip install pre-commit`, then `pre-commit install`.
@@ -29,7 +29,7 @@ and prints one block per gate:
 | `make lint-all` | the linters [.golangci.yml](.golangci.yml) enables, over the whole tree |
 | `make tidy` | `go mod tidy -diff`, so a stale go.mod or go.sum cannot reach main |
 | `make vulns` | govulncheck, which reports only what this module can actually call |
-| `make mutate` | mutation testing with gremlins: a mutant that lives is a test that asserts nothing |
+| `make mutate` | mutation testing with gremlins: every mutant must be covered and killed, see [.gremlins.yaml](.gremlins.yaml) |
 
 All of them are expected to pass before a pull request. `make lint` narrows linting to your
 branch, `make lint-fix` applies the linters' automatic fixes, `make coverage` shows the coverage

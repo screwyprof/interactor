@@ -1,6 +1,8 @@
-# Asked of git rather than found on disk, so the list is the repository's files and not whatever
-# else the working tree holds. wildcard drops tracked files deleted but not yet staged.
-GO_FILES := $(wildcard $(shell git -c core.quotePath=false ls-files -co --exclude-standard "*.go"))
+# Asked of git rather than found on disk: tracked files plus untracked ones that are not ignored,
+# so a new file counts before it is added, but nothing else the working tree holds.
+GIT_LS := git -c core.quotePath=false ls-files -co --exclude-standard
+# wildcard drops tracked files deleted but not yet staged.
+GO_FILES := $(wildcard $(shell $(GIT_LS) "*.go"))
 LOCAL_PACKAGES := github.com/screwyprof/interactor/v3
 COVERAGE := coverage.out
 # The same figure as codecov.yml's project target: one is what a contributor sees before pushing,
@@ -72,13 +74,19 @@ vulns: ## report known vulnerabilities reachable from this module
 	@go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
 
 # Coverage says a line ran; mutation testing says whether a test would notice it being wrong.
-# gremlins flips conditions and arithmetic and reports the mutants no test killed. It works on a
-# copy of the module root, so only tracked files go in, not whatever else the checkout holds.
-mutate: ## report mutants the tests failed to kill
+# gremlins flips conditions and arithmetic and reports the mutants no test killed; .gremlins.yaml
+# fails the run unless every mutant is covered and killed. It works on a copy of the module root,
+# so only the files GIT_LS lists go in, skipping any deleted but not yet staged.
+#
+# --timeout-coefficient: the default limit is a small multiple of the suite's own runtime, and
+# back-to-back runs then timed out every dispatcher mutant. A timed-out mutant counts as neither
+# killed nor lived, so it would slip past the thresholds; at 30 none time out.
+mutate: ## run mutation testing; fails unless every mutant is killed
 	@echo -e "$(OK_COLOR)==> Mutation testing$(NO_COLOR)"
 	@test -n "$(GO_FILES)" || { echo "no Go files; this needs a git checkout"; exit 1; }
 	@tmp=$$(mktemp -d) && trap 'rm -rf "$$tmp"' EXIT; \
-	 git -c core.quotePath=false ls-files -co --exclude-standard | tar -cf - -T - | (cd "$$tmp" && tar -xf -); \
+	 $(GIT_LS) | while IFS= read -r f; do if [ -e "$$f" ]; then printf '%s\n' "$$f"; fi; done \
+		| tar -cf - -T - | (cd "$$tmp" && tar -xf -); \
 	 (cd "$$tmp" && go run github.com/go-gremlins/gremlins/cmd/gremlins@$(GREMLINS_VERSION) \
 		unleash --timeout-coefficient=30 .)
 
