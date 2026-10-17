@@ -84,8 +84,9 @@ func TestDispatch(t *testing.T) {
 		var d interactor.Dispatcher
 		mustRegister(t, &d, AnswerQuestion{})
 
-		//nolint:staticcheck // a nil context is what is under test.
-		_, err := d.Dispatch[Answer](nil, Question{})
+		var nilCtx context.Context // a nil context is what is under test
+
+		_, err := d.Dispatch[Answer](nilCtx, Question{})
 
 		require.ErrorIs(t, err, interactor.ErrNilContext)
 	})
