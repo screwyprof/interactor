@@ -123,11 +123,11 @@ func TestFunc(t *testing.T) {
 		{
 			name: "a use case returns an error",
 			runner: func(_ context.Context, _ TestRequest, _ *TestResponse) error {
-				return errSomeErr
+				return errSome
 			},
 			request:       TestRequest{id: 123},
 			response:      &TestResponse{},
-			wantRunnerErr: errSomeErr,
+			wantRunnerErr: errSome,
 		},
 		{
 			name: "second input param maybe be a pointer to a struct implementing Request",
@@ -207,10 +207,10 @@ func TestAdapt(t *testing.T) {
 		},
 		{
 			name:          "a use case returns an error",
-			runner:        ConcreteUseCase{err: errSomeErr},
+			runner:        ConcreteUseCase{err: errSome},
 			request:       TestRequest{id: 123},
 			response:      &TestResponse{},
-			wantRunnerErr: errSomeErr,
+			wantRunnerErr: errSome,
 		},
 		{
 			name:       "second input param maybe be a pointer type implementing Request",

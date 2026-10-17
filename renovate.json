@@ -1,0 +1,66 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommitTypeAll(chore)"
+  ],
+  "timezone": "Europe/London",
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 5,
+
+  "constraints": {
+    "go": "1.26"
+  },
+
+  "minimumReleaseAge": "3 days",
+  "internalChecksFilter": "strict",
+
+  "postUpdateOptions": ["gomodTidy"],
+
+  "packageRules": [
+    {
+      "description": "A major is a changelog to read, not a number to bump.",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "addLabels": ["major"]
+    },
+    {
+      "description": "Actions are not automerged: checkout and setup-go build the environment make check evaluates in, so a bumped action is part of the gate rather than something the gate judges.",
+      "matchManagers": ["github-actions"],
+      "automerge": false
+    },
+    {
+      "description": "One pull request for the Go module set. Not automerged: make check runs go test, which links and executes the bumped module, so the code being judged produces the green check.",
+      "matchManagers": ["gomod"],
+      "groupName": "go modules",
+      "automerge": false
+    },
+    {
+      "description": "The Makefile's tool pins, grouped and not automerged: make check runs these tools to decide whether the bump that changed them is safe, so an automerged bump would validate itself.",
+      "matchManagers": ["custom.regex"],
+      "groupName": "go tools",
+      "automerge": false
+    },
+    {
+      "description": "go.mod's go directive is the minimum Go version for everyone importing this library. Raising it is a release decision, not a dependency bump; the workflows track the latest 1.26.x patch on their own.",
+      "matchDepNames": ["go"],
+      "enabled": false
+    }
+  ],
+
+  "customManagers": [
+    {
+      "description": "The Makefile's *_VERSION pins. Every tool is fetched with `go run pkg@version`, so the version lives beside the command that uses it rather than in go.mod.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^Makefile$/"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+?)\\s+depName=(?<depName>[^\\s]+?)\\s*\\n\\s*[A-Z_]+_VERSION\\s*:?=\\s*(?<currentValue>\\S+)"
+      ]
+    }
+  ],
+
+  "vulnerabilityAlerts": {
+    "description": "A security fix gets its pull request immediately rather than on Monday, but still waits for a human: vulnerabilityAlerts drops minimumReleaseAge, so automerging here would merge at zero age.",
+    "schedule": ["at any time"]
+  }
+}

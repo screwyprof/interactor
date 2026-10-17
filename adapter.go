@@ -12,7 +12,7 @@ import (
 //
 //  1. Have 3 arguments:
 //
-//     - ctx context.Context,
+//     - ctx [context.Context],
 //
 //     - req a struct which implements Request interface,
 //
@@ -46,7 +46,7 @@ func Must(fn UseCaseRunnerFn, err error) UseCaseRunnerFn {
 // The function `Run` must have the following signature:
 //
 //  1. Have 3 arguments:
-//     - ctx context.Context,
+//     - ctx [context.Context],
 //     - req a struct which implements Request interface,
 //     - res a pointer to a struct which implements Response interface.
 //
@@ -177,7 +177,7 @@ func ensureParamsHaveValidTypes(useCaseRunnerType reflect.Type) error {
 	return nil
 }
 
-// firstArgIsContext requires context.Context itself: callers pass a context.Context, which
+// firstArgIsContext requires [context.Context] itself: callers pass a [context.Context], which
 // cannot be assigned to a concrete type or to a wider interface even if those implement it.
 func firstArgIsContext(useCaseRunnerType reflect.Type) bool {
 	return useCaseRunnerType.In(0) == reflect.TypeFor[context.Context]()
