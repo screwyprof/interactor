@@ -2,7 +2,6 @@ package interactor_test
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"testing"
 
@@ -54,7 +53,7 @@ func TestDispatcher(t *testing.T) {
 
 		// assert
 		require.NoError(t, err)
-		assert.Equal(t, res.result, 123)
+		assert.Equal(t, 123, res.result)
 	})
 }
 
@@ -76,7 +75,7 @@ func BenchmarkDispatcher(b *testing.B) {
 func assertUseCaseRunnerNotFound(t *testing.T, err error) {
 	t.Helper()
 
-	assert.True(t, errors.Is(err, interactor.ErrUseCaseRunnerNotFound))
+	assert.ErrorIs(t, err, interactor.ErrUseCaseRunnerNotFound)
 }
 
 func TestDispatcherIsSafeForConcurrentUse(t *testing.T) {

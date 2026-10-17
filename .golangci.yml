@@ -62,6 +62,7 @@ linters:
     - rowserrcheck
     - sqlclosecheck
     - staticcheck
+    - testifylint
     - testpackage
     - thelper
     - tparallel

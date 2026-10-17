@@ -28,7 +28,8 @@ func ExampleDispatcher() {
 }
 
 // The README usage example, compiled and run here. Types are prefixed to avoid clashing with
-// the test helpers; otherwise it must stay identical to the README.
+// the test helpers and the parameter names are blanked for the linter; keep the rest in step
+// with the README.
 
 // ReadmeRequest represents a test request.
 type ReadmeRequest struct{}

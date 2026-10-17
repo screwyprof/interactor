@@ -32,7 +32,7 @@ func Func(fn any) (UseCaseRunnerFn, error) {
 // It is useful for tests and for cases where you are sure that the signature is valid.
 // You can use it like this:
 //
-//	interactor.Must(interactor.Func(userCaseRunner.run))
+//	interactor.Must(interactor.Func(useCaseRunner.Run))
 func Must(fn UseCaseRunnerFn, err error) UseCaseRunnerFn {
 	if err != nil {
 		panic(err)
@@ -71,10 +71,10 @@ func Adapt(runner any) (UseCaseRunnerFn, error) {
 
 // MustAdapt is a wrapper around Adapt which panics if an error occurs.
 //
-// It is useful for tests and for cases where you are sure that the runner has a `Ru`n method with a valid signature.
+// It is useful for tests and for cases where you are sure that the runner has a `Run` method with a valid signature.
 // You can use it like this:
 //
-//	interactor.MustAdapt(userCaseRunner)
+//	interactor.MustAdapt(useCaseRunner)
 func MustAdapt(fn any) UseCaseRunnerFn {
 	return Must(Adapt(fn))
 }
