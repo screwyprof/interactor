@@ -44,8 +44,7 @@ func Test(tb testing.TB) *Scenario {
 type Given[Req, Res any] struct {
 	tb      testing.TB
 	useCase interactor.UseCase[Req, Res]
-	ctx     context.Context //nolint:containedctx // carried from WithContext to When, within one scenario.
-	ctxSet  bool            // WithContext was called, so ctx is used even when nil
+	ctx     context.Context //nolint:containedctx // the test's, or WithContext's: carried to When.
 }
 
 // Given sets the use case under test. A nil use case fails the test.
@@ -56,7 +55,7 @@ func (s *Scenario) Given[Req, Res any](useCase interactor.UseCase[Req, Res]) *Gi
 		require.FailNow(s.tb, "testdsl: Given needs a use case, got nil")
 	}
 
-	return &Given[Req, Res]{tb: s.tb, useCase: useCase}
+	return &Given[Req, Res]{tb: s.tb, useCase: useCase, ctx: s.tb.Context()}
 }
 
 // WithContext returns a copy of g whose use case runs under ctx instead of the test's context, for
@@ -64,7 +63,7 @@ func (s *Scenario) Given[Req, Res any](useCase interactor.UseCase[Req, Res]) *Gi
 // start other scenarios. ctx is passed as given, nil included.
 func (g *Given[Req, Res]) WithContext(ctx context.Context) *Given[Req, Res] {
 	c := *g
-	c.ctx, c.ctxSet = ctx, true
+	c.ctx = ctx
 
 	return &c
 }
@@ -85,12 +84,7 @@ type When[Res any] struct {
 func (g *Given[Req, Res]) When(req Req) *When[Res] {
 	g.tb.Helper()
 
-	ctx := g.ctx
-	if !g.ctxSet {
-		ctx = g.tb.Context()
-	}
-
-	got, err := g.useCase.Run(ctx, req)
+	got, err := g.useCase.Run(g.ctx, req)
 
 	// The flag has its own allocation so the cleanup below keeps only it alive, not the result.
 	tb, checked := g.tb, new(bool)

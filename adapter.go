@@ -20,7 +20,7 @@ func FromOutParam[Req, Res any](run func(ctx context.Context, req Req, res *Res)
 		return nil
 	}
 
-	return UseCaseFunc[Req, Res](func(ctx context.Context, req Req) (Res, error) {
+	return func(ctx context.Context, req Req) (Res, error) {
 		var res Res
 
 		if err := run(ctx, req, &res); err != nil {
@@ -30,5 +30,5 @@ func FromOutParam[Req, Res any](run func(ctx context.Context, req Req, res *Res)
 		}
 
 		return res, nil
-	})
+	}
 }

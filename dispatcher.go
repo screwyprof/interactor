@@ -77,7 +77,8 @@ func (d *Dispatcher) Register[Req, Res any](uc UseCase[Req, Res]) error {
 // It returns [ErrNilContext] for a nil ctx, [ErrUseCaseNotFound] if nothing is registered for
 // Req, and a [*ResponseTypeError] if the registered use case returns a type other than Res.
 // Errors from the use case itself are returned unchanged, including any it gets from dispatching
-// further requests.
+// further requests, together with whatever response it returned alongside the error. A use case
+// wrapped with [FromOutParam] always returns the zero response with an error.
 func (d *Dispatcher) Dispatch[Res, Req any](ctx context.Context, req Req) (Res, error) {
 	var zero Res
 

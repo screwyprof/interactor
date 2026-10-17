@@ -45,11 +45,13 @@ func (p Pinger) Run(ctx context.Context, req Ping) (Pong, error) {
 type fakeTB struct {
 	testing.TB // methods the DSL must not call panic through the nil interface
 
-	ctx      context.Context //nolint:containedctx // a fake TB has to return a context from Context().
-	errors   []string        // every failure message, in order
-	stopped  bool            // FailNow was called
-	skipped  bool            // SkipNow was called
-	cleanups []func()
+	ctx            context.Context //nolint:containedctx // a fake TB has to return a context from Context().
+	errors         []string        // every failure message, in order
+	stopped        bool            // FailNow was called
+	skipped        bool            // SkipNow was called
+	panicked       any             // what the scenario panicked with, if it did
+	failNowReturns bool            // FailNow records the failure and returns, as some TB wrappers do
+	cleanups       []func()
 }
 
 func (f *fakeTB) Helper() {}
@@ -63,7 +65,9 @@ func (f *fakeTB) Errorf(format string, args ...any) {
 func (f *fakeTB) FailNow() {
 	f.stopped = true
 
-	runtime.Goexit()
+	if !f.failNowReturns {
+		runtime.Goexit()
+	}
 }
 
 func (f *fakeTB) Failed() bool { return len(f.errors) > 0 || f.stopped }
@@ -81,21 +85,22 @@ func (f *fakeTB) Cleanup(fn func()) { f.cleanups = append(f.cleanups, fn) }
 func (f *fakeTB) Context() context.Context { return f.ctx }
 
 // run runs scenario against a fakeTB on its own goroutine, as testing.T would, then its cleanups.
-// Waiting for the goroutine orders its writes to f before the reads here, so f needs no lock.
 func run(t *testing.T, scenario func(tb testing.TB)) *fakeTB {
 	t.Helper()
 
-	f := &fakeTB{ctx: t.Context()}
+	return runOn(t, &fakeTB{ctx: t.Context()}, scenario)
+}
+
+// runOn is run with a fakeTB set up by the caller. Waiting for the goroutine orders its writes to f
+// before the reads here, so f needs no lock. A panic is kept apart from the failures, so a test
+// expecting the DSL to fail cannot pass because it crashed instead.
+func runOn(t *testing.T, f *fakeTB, scenario func(tb testing.TB)) *fakeTB {
+	t.Helper()
 
 	var wg sync.WaitGroup
 
-	// A panic is recorded as a failure, so a missing guard fails one assertion instead of the binary.
 	wg.Go(func() {
-		defer func() {
-			if r := recover(); r != nil {
-				f.errors = append(f.errors, fmt.Sprint("panic: ", r))
-			}
-		}()
+		defer func() { f.panicked = recover() }()
 
 		scenario(f)
 	})
@@ -108,11 +113,14 @@ func run(t *testing.T, scenario func(tb testing.TB)) *fakeTB {
 	return f
 }
 
-// failed runs scenario and reports whether it failed.
+// failed runs scenario and reports whether it failed. A panic is not a failure: it fails t.
 func failed(t *testing.T, scenario func(tb testing.TB)) bool {
 	t.Helper()
 
-	return run(t, scenario).Failed()
+	f := run(t, scenario)
+	require.Nil(t, f.panicked, "the scenario panicked instead of failing")
+
+	return f.Failed()
 }
 
 func TestThen(t *testing.T) {
@@ -231,6 +239,7 @@ func TestThenRejectsANilArgument(t *testing.T) {
 				tc.then(testdsl.Test(tb).Given(Pinger{}).When(Ping{Fail: true}))
 			})
 
+			require.Nil(t, f.panicked, "the scenario panicked instead of failing")
 			assert.True(t, f.stopped)
 			assert.Contains(t, strings.Join(f.errors, "\n"), tc.want)
 		})
@@ -326,6 +335,7 @@ func TestGivenRejectsANilUseCase(t *testing.T) {
 				testdsl.Test(tb).Given(useCase).When(Ping{}).Then(Pong{OK: true})
 			})
 
+			require.Nil(t, f.panicked, "the scenario panicked instead of failing")
 			assert.True(t, f.stopped)
 			require.Len(t, f.errors, 1)
 			assert.Contains(t, f.errors[0], "testdsl: Given needs a use case, got nil")
@@ -367,7 +377,6 @@ func TestWhenContext(t *testing.T) {
 			f := run(t, func(tb testing.TB) {
 				tb.Helper()
 
-				//nolint:contextcheck // which context reaches the use case is what is under test.
 				tc.given(testdsl.Test(tb).Given(Pinger{gotCtx: &gotCtx})).When(Ping{}).Then(Pong{OK: true})
 			})
 
@@ -388,9 +397,8 @@ func TestWithContextLeavesTheGivenUnchanged(t *testing.T) {
 		tb.Helper()
 
 		given := testdsl.Test(tb).Given(Pinger{gotCtx: &gotCtx})
-		// Which context reaches the use case is what is under test.
-		given.WithContext(other).When(Ping{}).Then(Pong{OK: true}) //nolint:contextcheck // see above.
-		given.When(Ping{}).Then(Pong{OK: true})                    //nolint:contextcheck // see above.
+		given.WithContext(other).When(Ping{}).Then(Pong{OK: true})
+		given.When(Ping{}).Then(Pong{OK: true})
 	})
 
 	assert.False(t, f.Failed())
@@ -405,16 +413,18 @@ func TestMissingThenIsReportedAtTheCallersLine(t *testing.T) {
 	source, err := os.ReadFile("dsl_test.go")
 	require.NoError(t, err)
 
-	// The last occurrence: the first is this lookup itself.
-	marker := strings.LastIndex(string(source), "// the scenario the report must point at")
-	require.Positive(t, marker, "marker comment missing")
+	// The marker appears twice: in this lookup, and on the scenario line it marks.
+	const marker = "// the scenario the report must point at"
+	require.Equal(t, 2, strings.Count(string(source), marker), "marker comment missing or duplicated")
 
-	line := strings.Count(string(source[:marker]), "\n") + 1
+	at := strings.LastIndex(string(source), marker)
+
+	line := strings.Count(string(source[:at]), "\n") + 1
 
 	// Only -test.run: the parent's own flags, such as -test.coverprofile, must not reach the child.
 	child := exec.CommandContext(t.Context(), os.Args[0], "-test.run=^TestMissingThenInRealTest$", "-test.count=1")
 
-	child.Env = append(os.Environ(), "TESTDSL_CHILD=1")
+	child.Env = append(os.Environ(), "INTERACTOR_TESTDSL_MISSING_THEN_CHILD=1")
 
 	out, err := child.CombinedOutput()
 
@@ -425,7 +435,7 @@ func TestMissingThenIsReportedAtTheCallersLine(t *testing.T) {
 func TestMissingThenInRealTest(t *testing.T) {
 	t.Parallel()
 
-	if os.Getenv("TESTDSL_CHILD") != "1" {
+	if os.Getenv("INTERACTOR_TESTDSL_MISSING_THEN_CHILD") != "1" {
 		t.Skip("run by TestMissingThenIsReportedAtTheCallersLine")
 	}
 

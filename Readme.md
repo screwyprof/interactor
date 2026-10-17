@@ -163,7 +163,7 @@ func TestGreetScenarios(t *testing.T) {
 }
 ```
 
-`When` runs the use case under the test's context (`t.Context()`); for a use case that reads values such as the current user from its context, add `.WithContext(ctx)` before `When`. A scenario that never reaches a `Then` fails the test at the line that called `When`. `testdsl` uses [testify](https://github.com/stretchr/testify), so your tests depend on it too.
+`When` runs the use case under the test's context (`t.Context()`); for a use case that reads values such as the current user from its context, add `.WithContext(ctx)` before `When`. A scenario that never reaches a `Then` fails the test at the line that called `When`, unless the test is skipped. `testdsl` uses [testify](https://github.com/stretchr/testify), so your tests depend on it too.
 
 ## Migrating from v2
 
