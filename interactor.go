@@ -31,3 +31,5 @@ type UseCaseFunc[Req, Res any] func(ctx context.Context, req Req) (Res, error)
 func (f UseCaseFunc[Req, Res]) Run(ctx context.Context, req Req) (Res, error) {
 	return f(ctx, req)
 }
+
+var _ UseCase[struct{}, struct{}] = UseCaseFunc[struct{}, struct{}](nil)

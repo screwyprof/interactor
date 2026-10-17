@@ -60,7 +60,12 @@ func ExampleFromOutParam() {
 
 	d.MustRegister(interactor.FromOutParam(legacyGreet))
 
-	greeting, _ := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
+	greeting, err := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
+	if err != nil {
+		fmt.Println(err)
+
+		return
+	}
 
 	fmt.Println(greeting.Text)
 
@@ -77,7 +82,12 @@ func ExampleUseCaseFunc() {
 
 	d.MustRegister(shout)
 
-	greeting, _ := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
+	greeting, err := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
+	if err != nil {
+		fmt.Println(err)
+
+		return
+	}
 
 	fmt.Println(greeting.Text)
 

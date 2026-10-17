@@ -14,8 +14,9 @@ var (
 	ErrNilContext        = errors.New("interactor: context must not be nil")
 )
 
-// ResponseTypeError is returned by [Dispatcher.Dispatch] when the use case registered for the request type
-// returns a different response type than the one asked for. Match it with [errors.As].
+// ResponseTypeError is returned by [Dispatcher.Dispatch] when the use case registered for the
+// request type returns a different response type than the one asked for. Match it with
+// [errors.AsType].
 type ResponseTypeError struct {
 	Request    reflect.Type // the request type dispatched
 	Registered reflect.Type // the response type of the registered use case

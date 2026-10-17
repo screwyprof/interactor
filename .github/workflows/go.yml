@@ -80,6 +80,7 @@ jobs:
 
   # go.mod sets the minimum Go version; this proves the library also builds and passes on the
   # newest release its users may be on. `check` above stays on 1.27 so its gates are reproducible.
+  # Until Go 1.28 ships, stable is 1.27 too and this repeats `check`'s tests.
   test-stable:
     runs-on: ubuntu-latest
     steps:

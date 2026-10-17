@@ -147,18 +147,6 @@ func TestRegister(t *testing.T) {
 	}
 }
 
-func TestNewDispatcher(t *testing.T) {
-	t.Parallel()
-
-	d := interactor.NewDispatcher()
-	d.MustRegister(AnswerQuestion{})
-
-	got, err := d.Dispatch[Answer](t.Context(), Question{ID: 1})
-
-	require.NoError(t, err)
-	assert.Equal(t, Answer{Value: 2}, got)
-}
-
 func TestDispatcherIsSafeForConcurrentUse(t *testing.T) {
 	t.Parallel()
 
@@ -175,10 +163,14 @@ func TestDispatcherIsSafeForConcurrentUse(t *testing.T) {
 			}
 		})
 		wg.Go(func() {
-			_, err := d.Dispatch[Answer](context.Background(), Question{ID: 1})
+			got, err := d.Dispatch[Answer](t.Context(), Question{ID: 1})
 			if err != nil {
 				assert.ErrorIs(t, err, interactor.ErrUseCaseNotFound)
+
+				return
 			}
+
+			assert.Equal(t, Answer{Value: 2}, got)
 		})
 	}
 

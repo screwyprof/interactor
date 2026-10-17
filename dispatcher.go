@@ -23,11 +23,6 @@ type entry struct {
 	response reflect.Type
 }
 
-// NewDispatcher returns an empty Dispatcher. It is equivalent to new(Dispatcher).
-func NewDispatcher() *Dispatcher {
-	return &Dispatcher{}
-}
-
 // Register adds uc as the use case for requests of type Req.
 //
 // Request types match exactly: Req and *Req are different types. It returns [ErrNilUseCase] for
@@ -61,9 +56,14 @@ func (d *Dispatcher) Register[Req, Res any](uc UseCase[Req, Res]) error {
 //
 //	greeting, err := d.Dispatch[Greeting](ctx, Hello{})
 //
+// The use case is found by Req, the request's static type: a request held in an interface
+// variable is looked up as that interface type, not its dynamic type. Res must be exactly the
+// registered use case's response type.
+//
 // It returns [ErrNilContext] for a nil ctx, [ErrUseCaseNotFound] if nothing is registered for
 // Req, and a [*ResponseTypeError] if the registered use case returns a type other than Res.
-// Errors from the use case itself are returned unchanged.
+// Errors from the use case itself are returned unchanged, including any it gets from dispatching
+// further requests.
 func (d *Dispatcher) Dispatch[Res, Req any](ctx context.Context, req Req) (Res, error) {
 	var zero Res
 

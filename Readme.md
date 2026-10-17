@@ -54,7 +54,8 @@ func main() {
 - `MustRegister` panics on a wiring mistake, which is what you want at startup; `Register` returns the error instead.
 - `Dispatch` names only the response type; the request type is inferred from the argument.
 - A plain function becomes a use case with `interactor.UseCaseFunc[Hello, Greeting](fn)`.
-- The zero `Dispatcher` is ready to use and safe for concurrent use.
+- The zero `Dispatcher` is ready to use and safe for concurrent use; don't copy it after first use.
+- The use case is found by the request's static type, so pass the concrete request type, not one held in `any`.
 - Request types match exactly: `Hello` and `*Hello` are different types.
 
 ### Dispatcher or a single use case?
@@ -87,7 +88,7 @@ A component that runs a single use case can depend on it directly, since `UseCas
 | `ErrAlreadyRegistered` | `Register` for a request type that already has a use case (`MustRegister` panics with it) |
 | `ErrNilUseCase` | `Register` with a nil use case (`MustRegister` panics with it) |
 | `ErrUseCaseNotFound` | `Dispatch` for a request type nothing is registered for |
-| `*ResponseTypeError` | `Dispatch` asks for a response type other than the registered one (match with `errors.As`) |
+| `*ResponseTypeError` | `Dispatch` asks for a response type other than the registered one (match with `errors.AsType[*interactor.ResponseTypeError]`) |
 | `ErrNilContext` | `Dispatch` with a nil context |
 
 Errors returned by the use case itself come back unchanged.
@@ -109,7 +110,7 @@ func TestGreet(t *testing.T) {
 
 `Given` fixes the use case's request and response types for the rest of the chain, so `When` only accepts its request and `Then` only its response: `Then(42)` would not compile.
 
-Expect an error with `ThenFailWith`, which matches like `errors.Is`:
+Expect an error with `ThenFailWith`, which matches like `errors.Is`. Say `Greet` rejects an empty name with `ErrNoName`:
 
 ```go
 func TestGreetRejectsAnEmptyName(t *testing.T) {
@@ -168,14 +169,19 @@ v3 replaces the reflection-based API with generics. Most of what v2 checked at r
 
 | v2 | v3 |
 |---|---|
-| `Run(ctx, req Req, res *Res) error` | `Run(ctx, req Req) (Res, error)` |
-| `interactor.NewDispatcher()` | `var d interactor.Dispatcher` (or `NewDispatcher()`) |
-| `d.Register(Req{}, interactor.MustAdapt(uc))` | `d.MustRegister(uc)` |
-| `d.Register(Req{}, interactor.Must(interactor.Func(fn)))` | `d.MustRegister(interactor.UseCaseFunc[Req, Res](fn))` |
+| `Run(ctx, req Req, res *Res) error` | `Run(ctx, req Req) (Res, error)`, or keep it and wrap with `FromOutParam` |
+| `UseCaseRunner`, `UseCaseRunnerFn` | `UseCase[Req, Res]`, `UseCaseFunc[Req, Res]` |
+| code depending on `UseCaseRunner` to accept the dispatcher | `*interactor.Dispatcher`, or an interface you define for the use case you need: a generic method can't satisfy an interface, so the dispatcher no longer implements one |
+| `interactor.NewDispatcher()` | `var d interactor.Dispatcher` |
+| `d.Register(Req{}, interactor.MustAdapt(uc))` | `d.MustRegister(uc)` once `Run` has the v3 shape, or `d.MustRegister(interactor.FromOutParam(uc.Run))` unchanged |
+| `d.Register(Req{}, interactor.Must(interactor.Func(fn)))` | `d.MustRegister(interactor.FromOutParam(fn))` unchanged, or `interactor.UseCaseFunc[Req, Res](fn)` once `fn` returns its response |
 | `var res Res; err := d.Run(ctx, req, &res)` | `res, err := d.Dispatch[Res](ctx, req)` |
-| registering a type twice overwrote the first | `ErrAlreadyRegistered` |
+| a request held in `any` was routed by its dynamic type | routing uses the static type: pass the concrete request |
+| registering a type twice overwrote the first | `ErrAlreadyRegistered`, and `MustRegister` panics |
+| a nil runner failed at `Run` with `ErrUseCaseRunnerNotFound` | `ErrNilUseCase` at `Register` |
 | `ErrUseCaseRunnerNotFound` | `ErrUseCaseNotFound` |
 | `ErrResultTypeMismatch` | `*ResponseTypeError` |
+| `Request`, `Response`, `Func`, `Adapt`, `Must`, `MustAdapt` and their signature errors | removed: the compiler checks what they checked at runtime |
 
 To move one use case at a time, wrap a v2-style one with `FromOutParam`; it registers unchanged:
 
