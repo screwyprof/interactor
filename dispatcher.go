@@ -36,10 +36,7 @@ func (d *Dispatcher) Register[Req, Res any](uc UseCase[Req, Res]) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	var current map[reflect.Type]any
-	if p := d.useCases.Load(); p != nil {
-		current = *p
-	}
+	current := d.registrations()
 
 	if _, ok := current[reqType]; ok {
 		return fmt.Errorf("%w: %v", ErrAlreadyRegistered, reqType)
@@ -77,14 +74,7 @@ func (d *Dispatcher) Dispatch[Res, Req any](ctx context.Context, req Req) (Res, 
 
 	reqType := reflect.TypeFor[Req]()
 
-	var (
-		registered any
-		ok         bool
-	)
-	if m := d.useCases.Load(); m != nil {
-		registered, ok = (*m)[reqType]
-	}
-
+	registered, ok := d.registrations()[reqType]
 	if !ok {
 		return zero, fmt.Errorf("%w: %v", ErrUseCaseNotFound, reqType)
 	}
@@ -96,6 +86,16 @@ func (d *Dispatcher) Dispatch[Res, Req any](ctx context.Context, req Req) (Res, 
 	}
 
 	return uc.Run(ctx, req) //nolint:wrapcheck // the use case's own error, returned unchanged as documented.
+}
+
+// registrations returns the published map, or nil before the first Register: looking up a key in
+// a nil map is safe, so callers need no check of their own.
+func (d *Dispatcher) registrations() map[reflect.Type]any {
+	if p := d.useCases.Load(); p != nil {
+		return *p
+	}
+
+	return nil
 }
 
 // MustRegister is like [Dispatcher.Register] but panics if registration fails. Use it when wiring

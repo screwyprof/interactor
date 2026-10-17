@@ -57,8 +57,8 @@ type When[Res any] struct {
 	err error
 }
 
-// When runs the use case with ctx and req. Call When and Then from the test's goroutine, as for
-// any test that can fail.
+// When runs the use case with ctx and req. Call the Then methods from the test's goroutine, as
+// for any test that can fail.
 func (g *Given[Req, Res]) When(ctx context.Context, req Req) *When[Res] {
 	got, err := g.useCase.Run(ctx, req)
 
