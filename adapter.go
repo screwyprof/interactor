@@ -23,7 +23,7 @@ import (
 // An example signature may look like as follows:
 //
 //	func(ctx context.Context, req TestRequest, res *TestResponse) error
-func Func(fn interface{}) (UseCaseRunnerFn, error) {
+func Func(fn any) (UseCaseRunnerFn, error) {
 	useCaseRunnerType := reflect.TypeOf(fn)
 	if err := ensureSignatureIsValid(useCaseRunnerType); err != nil {
 		return nil, err
@@ -69,7 +69,7 @@ func Must(fn UseCaseRunnerFn, err error) UseCaseRunnerFn {
 // An example signature may look like as follows:
 //
 //	func (uc *UseCase) Run(ctx context.Context, req TestRequest, res *TestResponse) error
-func Adapt(runner interface{}) (UseCaseRunnerFn, error) {
+func Adapt(runner any) (UseCaseRunnerFn, error) {
 	fnValue := reflect.ValueOf(runner).MethodByName("Run")
 	if !fnValue.IsValid() {
 		return nil, fmt.Errorf("%w", ErrUseCaseRunnerHasNoRunMethod)
@@ -84,7 +84,7 @@ func Adapt(runner interface{}) (UseCaseRunnerFn, error) {
 // You can use it like this:
 //
 //	interactor.MustAdapt(userCaseRunner)
-func MustAdapt(fn interface{}) UseCaseRunnerFn {
+func MustAdapt(fn any) UseCaseRunnerFn {
 	return Must(Adapt(fn))
 }
 
@@ -104,7 +104,7 @@ func ensureSignatureIsValid(useCaseRunnerType reflect.Type) error {
 	return nil
 }
 
-func ensureResultHasValidType(runnerType reflect.Type, res interface{}) error {
+func ensureResultHasValidType(runnerType reflect.Type, res any) error {
 	want := runnerType.In(2)
 	got := reflect.TypeOf(res)
 
@@ -132,17 +132,17 @@ func ensureParamsHaveValidTypes(useCaseRunnerType reflect.Type) error {
 }
 
 func firstArgIsContext(useCaseRunnerType reflect.Type) bool {
-	ctxtInterface := reflect.TypeOf((*context.Context)(nil)).Elem()
+	ctxtInterface := reflect.TypeFor[context.Context]()
 	ctx := useCaseRunnerType.In(0)
 
 	return ctx.Implements(ctxtInterface)
 }
 
 func secondArgIsRequest(useCaseRunnerType reflect.Type) bool {
-	requestInterface := reflect.TypeOf((*Request)(nil)).Elem()
+	requestInterface := reflect.TypeFor[Request]()
 
 	secondArg := useCaseRunnerType.In(1)
-	if secondArg.Kind() == reflect.Ptr {
+	if secondArg.Kind() == reflect.Pointer {
 		secondArg = secondArg.Elem()
 	}
 
@@ -150,13 +150,13 @@ func secondArgIsRequest(useCaseRunnerType reflect.Type) bool {
 }
 
 func thirdArgIsResponse(useCaseRunnerType reflect.Type) bool {
-	responseInterface := reflect.TypeOf((*Response)(nil)).Elem()
+	responseInterface := reflect.TypeFor[Response]()
 	thirdArg := useCaseRunnerType.In(2)
 
-	return thirdArg.Kind() == reflect.Ptr && thirdArg.Implements(responseInterface)
+	return thirdArg.Kind() == reflect.Pointer && thirdArg.Implements(responseInterface)
 }
 
-func invokeUseCaseRunner(useCaseRunner interface{}, args ...interface{}) error {
+func invokeUseCaseRunner(useCaseRunner any, args ...any) error {
 	result := invoke(useCaseRunner, args...)
 
 	if err, ok := result[0].Interface().(error); ok && err != nil {
@@ -166,7 +166,7 @@ func invokeUseCaseRunner(useCaseRunner interface{}, args ...interface{}) error {
 	return nil
 }
 
-func invoke(fn interface{}, args ...interface{}) []reflect.Value {
+func invoke(fn any, args ...any) []reflect.Value {
 	v := reflect.ValueOf(fn)
 
 	in := make([]reflect.Value, len(args))
