@@ -1,10 +1,10 @@
 # Interactor
 
-[![codecov](https://codecov.io/gh/screwyprof/interactor/graph/badge.svg)](https://codecov.io/gh/screwyprof/interactor) [![Go](https://github.com/screwyprof/interactor/actions/workflows/go.yml/badge.svg)](https://github.com/screwyprof/interactor/actions/workflows/go.yml) [![Vulnerabilities](https://github.com/screwyprof/interactor/actions/workflows/vulns.yml/badge.svg)](https://github.com/screwyprof/interactor/actions/workflows/vulns.yml) [![Release](https://img.shields.io/github/v/release/screwyprof/interactor)](https://github.com/screwyprof/interactor/releases/latest) [![Go Reference](https://pkg.go.dev/badge/github.com/screwyprof/interactor/v3.svg)](https://pkg.go.dev/github.com/screwyprof/interactor/v3) [![License](https://img.shields.io/github/license/screwyprof/interactor)](LICENSE)
+[![codecov](https://codecov.io/gh/screwyprof/interactor/graph/badge.svg)](https://codecov.io/gh/screwyprof/interactor) [![Go](https://github.com/screwyprof/interactor/actions/workflows/go.yml/badge.svg)](https://github.com/screwyprof/interactor/actions/workflows/go.yml) [![Vulnerabilities](https://github.com/screwyprof/interactor/actions/workflows/vulns.yml/badge.svg)](https://github.com/screwyprof/interactor/actions/workflows/vulns.yml) [![Release](https://img.shields.io/github/v/release/screwyprof/interactor)](https://github.com/screwyprof/interactor/releases/latest) [![Go Version](https://img.shields.io/github/go-mod/go-version/screwyprof/interactor)](https://go.dev/) [![Go Reference](https://pkg.go.dev/badge/github.com/screwyprof/interactor/v3.svg)](https://pkg.go.dev/github.com/screwyprof/interactor/v3) [![License](https://img.shields.io/github/license/screwyprof/interactor)](LICENSE)
 
 `Interactor` runs use cases and dispatches requests to them by request type. It is inspired by Uncle Bob's [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) and the interactor concept described there.
 
-A use case is any type with a `Run` method from a request to a response. The compiler checks the types, and the use case is called directly: reflection is only used to find it by request type, never to call it.
+A use case is any type with a `Run` method from a request to a response. The compiler checks the types, and the use case is called directly: reflection is only used to look it up by request type and to reject a nil one, never to call it.
 
 ## Installation
 
@@ -82,6 +82,8 @@ In tests, register fake use cases on a real `Dispatcher`; no mock is needed.
 A component that runs a single use case can depend on it directly, since `UseCase` is a plain interface: `greet interactor.UseCase[Hello, Greeting]`, then `h.greet.Run(ctx, req)`.
 
 ### Errors
+
+Most of these come back wrapped with the request type in the message, so match them with `errors.Is`, not `==`, and `*ResponseTypeError` with `errors.AsType`.
 
 | Error | When |
 |---|---|
@@ -161,7 +163,7 @@ func TestGreetScenarios(t *testing.T) {
 }
 ```
 
-`When` runs the use case under the test's context (`t.Context()`). `testdsl` uses [testify](https://github.com/stretchr/testify), so your tests depend on it too.
+`When` runs the use case under the test's context (`t.Context()`); for a use case that reads values such as the current user from its context, add `.WithContext(ctx)` before `When`. A scenario that never reaches a `Then` fails the test at the line that called `When`. `testdsl` uses [testify](https://github.com/stretchr/testify), so your tests depend on it too.
 
 ## Migrating from v2
 
@@ -183,7 +185,7 @@ v3 replaces the reflection-based API with generics. Most of what v2 checked at r
 | `ErrUseCaseRunnerNotFound` | `ErrUseCaseNotFound` |
 | `ErrResultTypeMismatch` | `*ResponseTypeError` |
 | `Request`, `Response`, `Func`, `Adapt`, `Must`, `MustAdapt` and their runtime errors (`ErrRequestTypeMismatch`, `ErrInvalidReturnType`, …) | removed: the compiler checks what they checked at runtime |
-| `testdsl.Test(t)(Given(r), When(ctx, req, &res), Then(want))` and its `GivenFn`, `WhenFn`, `ThenFn`, `Checker` types | `testdsl.Test(t).Given(uc).When(req).Then(want)`, checked at compile time; `ThenFailWith(err)` keeps its name |
+| `testdsl.Test(t)(Given(r), When(ctx, req, &res), Then(want))` and its `InteractorTester`, `GivenFn`, `WhenFn`, `ThenFn`, `Checker` types | `testdsl.Test(t).Given(uc).When(req).Then(want)`, checked at compile time; a custom context goes in `.WithContext(ctx)`; `ThenFailWith(err)` now needs a non-nil error and stops the test on a mismatch |
 
 To move one use case at a time, wrap a v2-style one with `FromOutParam`; it registers unchanged:
 
@@ -197,7 +199,7 @@ d.MustRegister(interactor.FromOutParam(legacy.Run))
 
 ## Contributing
 
-Contributions are welcome. Run `make check` before opening a pull request: it runs the tests with a 100% coverage floor, the linters, a `go mod tidy` check and `govulncheck`, the same gates as CI.
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md): `make check` runs the same gates as CI, and a fix needs a test that fails without it.
 
 ## License
 

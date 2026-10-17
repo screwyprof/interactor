@@ -5,7 +5,8 @@ import "context"
 // FromOutParam adapts a v2-style use case, which writes its response through a pointer, to a
 // [UseCaseFunc]. It returns nil for a nil run, which [Dispatcher.Register] rejects; calling Run on
 // that nil directly panics. A method value bound to a nil pointer, such as uc.Run on a nil *T, is
-// not nil and is not detected: check the receiver before wrapping it.
+// not nil and is not detected: check the receiver before wrapping it. With a value receiver,
+// evaluating uc.Run on a nil *T panics before FromOutParam is even called.
 //
 // On error the response is the zero value, even if run wrote to it before failing: a v2 use case
 // that reports details alongside its error, such as validation problems, must return them in the
