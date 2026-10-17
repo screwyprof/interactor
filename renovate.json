@@ -9,7 +9,7 @@
   "prConcurrentLimit": 5,
 
   "constraints": {
-    "go": "1.26"
+    "go": "1.27"
   },
 
   "minimumReleaseAge": "3 days",
@@ -42,7 +42,7 @@
       "automerge": false
     },
     {
-      "description": "go.mod's go directive is the minimum Go version for everyone importing this library. Raising it is a release decision, not a dependency bump; the workflows track the latest 1.26.x patch on their own.",
+      "description": "go.mod's go directive is the minimum Go version for everyone importing this library. Raising it is a release decision, not a dependency bump; the workflows track the latest 1.27.x patch on their own.",
       "matchDepNames": ["go"],
       "enabled": false
     }

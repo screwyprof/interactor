@@ -2,137 +2,201 @@ package interactor_test
 
 import (
 	"context"
+	"reflect"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/screwyprof/interactor/v2"
+	"github.com/screwyprof/interactor/v3"
 )
 
-func TestDispatcher(t *testing.T) {
+func TestDispatch(t *testing.T) {
 	t.Parallel()
 
-	t.Run("dispatcher implements UseCaseRunner interface", func(t *testing.T) {
+	t.Run("returns the registered use case's response", func(t *testing.T) {
 		t.Parallel()
 
-		dispatcher := interactor.NewDispatcher()
+		var d interactor.Dispatcher
+		mustRegister(t, &d, AnswerQuestion{})
 
-		var _ interactor.UseCaseRunner = dispatcher
-	})
+		got, err := d.Dispatch[Answer](t.Context(), Question{ID: 21})
 
-	t.Run("when use case not found, an error returned", func(t *testing.T) {
-		t.Parallel()
-
-		// arrange
-		dispatcher := interactor.NewDispatcher()
-
-		// act
-		var res TestResponse
-
-		err := dispatcher.Run(context.Background(), TestRequest{}, &res)
-
-		// assert
-		assertUseCaseRunnerNotFound(t, err)
-	})
-
-	t.Run("when use case registered, it is being run", func(t *testing.T) {
-		t.Parallel()
-
-		// arrange
-		useCaseRunner := &ConcreteUseCase{}
-
-		dispatcher := interactor.NewDispatcher()
-		dispatcher.Register(TestRequest{}, interactor.Must(interactor.Adapt(useCaseRunner)))
-
-		// act
-		var res TestResponse
-
-		err := dispatcher.Run(context.Background(), TestRequest{id: 123}, &res)
-
-		// assert
 		require.NoError(t, err)
-		assert.Equal(t, 123, res.result)
+		assert.Equal(t, Answer{Value: 42}, got)
+	})
+
+	t.Run("returns the use case's error unchanged", func(t *testing.T) {
+		t.Parallel()
+
+		var d interactor.Dispatcher
+		mustRegister(t, &d, AnswerQuestion{err: errBoom})
+
+		_, err := d.Dispatch[Answer](t.Context(), Question{})
+
+		require.ErrorIs(t, err, errBoom)
+	})
+
+	t.Run("fails when nothing is registered for the request type", func(t *testing.T) {
+		t.Parallel()
+
+		var d interactor.Dispatcher
+
+		_, err := d.Dispatch[Answer](t.Context(), Question{})
+
+		require.ErrorIs(t, err, interactor.ErrUseCaseNotFound)
+		assert.ErrorContains(t, err, "interactor_test.Question")
+	})
+
+	t.Run("matches request types exactly", func(t *testing.T) {
+		t.Parallel()
+
+		var d interactor.Dispatcher
+		mustRegister(t, &d, AnswerQuestion{})
+
+		_, err := d.Dispatch[Answer](t.Context(), &Question{})
+
+		require.ErrorIs(t, err, interactor.ErrUseCaseNotFound)
+	})
+
+	t.Run("fails when asked for a different response type", func(t *testing.T) {
+		t.Parallel()
+
+		var d interactor.Dispatcher
+		mustRegister(t, &d, AnswerQuestion{})
+
+		_, err := d.Dispatch[string](t.Context(), Question{})
+
+		var typeErr *interactor.ResponseTypeError
+		require.ErrorAs(t, err, &typeErr)
+		assert.Equal(t, reflect.TypeFor[Question](), typeErr.Request)
+		assert.Equal(t, reflect.TypeFor[Answer](), typeErr.Registered)
+		assert.Equal(t, reflect.TypeFor[string](), typeErr.Requested)
+		assert.EqualError(t, err,
+			"interactor: use case for interactor_test.Question returns interactor_test.Answer, not string")
+	})
+
+	t.Run("rejects a nil context", func(t *testing.T) {
+		t.Parallel()
+
+		var d interactor.Dispatcher
+		mustRegister(t, &d, AnswerQuestion{})
+
+		//nolint:staticcheck // a nil context is what is under test.
+		_, err := d.Dispatch[Answer](nil, Question{})
+
+		require.ErrorIs(t, err, interactor.ErrNilContext)
 	})
 }
 
-func BenchmarkDispatcher(b *testing.B) {
-	dispatcher := interactor.NewDispatcher()
-	useCaseRunner := &ConcreteUseCase{}
-	dispatcher.Register(TestRequest{}, interactor.Must(interactor.Adapt(useCaseRunner)))
+func TestRegister(t *testing.T) {
+	t.Parallel()
 
-	var res TestResponse
+	t.Run("rejects a second use case for the same request type", func(t *testing.T) {
+		t.Parallel()
 
-	req := TestRequest{id: 123}
-	ctx := context.Background()
+		var d interactor.Dispatcher
+		mustRegister(t, &d, AnswerQuestion{})
 
-	for b.Loop() {
-		_ = dispatcher.Run(ctx, req, &res)
+		err := d.Register(AnswerQuestion{err: errBoom})
+
+		require.ErrorIs(t, err, interactor.ErrAlreadyRegistered)
+
+		got, err := d.Dispatch[Answer](t.Context(), Question{ID: 1})
+		require.NoError(t, err, "the first registration must still serve")
+		assert.Equal(t, Answer{Value: 2}, got)
+	})
+
+	nilUseCases := []struct {
+		name    string
+		useCase interactor.UseCase[Question, Answer]
+	}{
+		{name: "nil interface", useCase: nil},
+		{name: "nil pointer", useCase: (*AnswerQuestion)(nil)},
+		{name: "nil func", useCase: interactor.UseCaseFunc[Question, Answer](nil)},
+		{name: "nil out-param func", useCase: interactor.FromOutParam[Question, Answer](nil)},
+	}
+
+	for _, tc := range nilUseCases {
+		t.Run("rejects a "+tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var d interactor.Dispatcher
+
+			err := d.Register(tc.useCase)
+
+			require.ErrorIs(t, err, interactor.ErrNilUseCase)
+		})
 	}
 }
 
-func assertUseCaseRunnerNotFound(t *testing.T, err error) {
-	t.Helper()
+func TestNewDispatcher(t *testing.T) {
+	t.Parallel()
 
-	assert.ErrorIs(t, err, interactor.ErrUseCaseRunnerNotFound)
+	d := interactor.NewDispatcher()
+	mustRegister(t, d, AnswerQuestion{})
+
+	got, err := d.Dispatch[Answer](t.Context(), Question{ID: 1})
+
+	require.NoError(t, err)
+	assert.Equal(t, Answer{Value: 2}, got)
 }
 
 func TestDispatcherIsSafeForConcurrentUse(t *testing.T) {
 	t.Parallel()
 
-	dispatcher := interactor.NewDispatcher()
-	runner := interactor.MustAdapt(ConcreteUseCase{})
-
-	var wg sync.WaitGroup
+	var (
+		d          interactor.Dispatcher
+		registered atomic.Int32
+		wg         sync.WaitGroup
+	)
 
 	for range 10 {
 		wg.Go(func() {
-			dispatcher.Register(TestRequest{}, runner)
+			if d.Register(AnswerQuestion{}) == nil {
+				registered.Add(1)
+			}
 		})
 		wg.Go(func() {
-			var res TestResponse
-
-			_ = dispatcher.Run(context.Background(), TestRequest{id: 1}, &res)
+			_, err := d.Dispatch[Answer](context.Background(), Question{ID: 1})
+			if err != nil {
+				assert.ErrorIs(t, err, interactor.ErrUseCaseNotFound)
+			}
 		})
 	}
 
 	wg.Wait()
+
+	assert.Equal(t, int32(1), registered.Load(), "exactly one concurrent registration must win")
 }
 
-func TestDispatcherZeroValueIsUsable(t *testing.T) {
-	t.Parallel()
+func BenchmarkDispatch(b *testing.B) {
+	var d interactor.Dispatcher
+	mustRegister(b, &d, AnswerQuestion{})
 
-	var dispatcher interactor.Dispatcher
+	ctx := b.Context()
 
-	dispatcher.Register(TestRequest{}, interactor.MustAdapt(ConcreteUseCase{}))
+	if _, err := d.Dispatch[Answer](ctx, Question{ID: 1}); err != nil {
+		b.Fatal(err)
+	}
 
-	var res TestResponse
+	b.ReportAllocs()
 
-	err := dispatcher.Run(context.Background(), TestRequest{id: 7}, &res)
-
-	require.NoError(t, err)
-	assert.Equal(t, 7, res.result)
+	for b.Loop() {
+		_, _ = d.Dispatch[Answer](ctx, Question{ID: 1})
+	}
 }
 
-func TestDispatcherTreatsNilRunnerAsNotRegistered(t *testing.T) {
-	t.Parallel()
+// BenchmarkDirect is the floor Dispatch is measured against: the same use case, called directly.
+func BenchmarkDirect(b *testing.B) {
+	uc := AnswerQuestion{}
+	ctx := b.Context()
 
-	dispatcher := interactor.NewDispatcher()
-	dispatcher.Register(TestRequest{}, nil)
+	b.ReportAllocs()
 
-	err := dispatcher.Run(context.Background(), TestRequest{}, &TestResponse{})
-
-	require.ErrorIs(t, err, interactor.ErrUseCaseRunnerNotFound)
-}
-
-func TestDispatcherNamesNilRequestInError(t *testing.T) {
-	t.Parallel()
-
-	dispatcher := interactor.NewDispatcher()
-
-	err := dispatcher.Run(context.Background(), nil, &TestResponse{})
-
-	require.ErrorIs(t, err, interactor.ErrUseCaseRunnerNotFound)
-	assert.NotContains(t, err.Error(), "%!", "error message has a fmt verb mismatch")
+	for b.Loop() {
+		_, _ = uc.Run(ctx, Question{ID: 1})
+	}
 }

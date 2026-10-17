@@ -1,7 +1,7 @@
 # Asked of git rather than found on disk, so the list is the repository's files and not whatever
 # else the working tree holds. wildcard drops tracked files deleted but not yet staged.
 GO_FILES := $(wildcard $(shell git -c core.quotePath=false ls-files -co --exclude-standard "*.go"))
-LOCAL_PACKAGES := github.com/screwyprof/interactor/v2
+LOCAL_PACKAGES := github.com/screwyprof/interactor/v3
 COVERAGE := coverage.out
 # The same figure as codecov.yml's project target: one is what a contributor sees before pushing,
 # the other is what blocks the merge.

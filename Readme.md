@@ -1,22 +1,17 @@
 # Interactor
 
-[![codecov](https://codecov.io/gh/screwyprof/interactor/graph/badge.svg)](https://codecov.io/gh/screwyprof/interactor) [![Go](https://github.com/screwyprof/interactor/actions/workflows/go.yml/badge.svg)](https://github.com/screwyprof/interactor/actions/workflows/go.yml) [![Vulnerabilities](https://github.com/screwyprof/interactor/actions/workflows/vulns.yml/badge.svg)](https://github.com/screwyprof/interactor/actions/workflows/vulns.yml) [![Release](https://img.shields.io/github/v/release/screwyprof/interactor)](https://github.com/screwyprof/interactor/releases/latest) [![Go Reference](https://pkg.go.dev/badge/github.com/screwyprof/interactor/v2.svg)](https://pkg.go.dev/github.com/screwyprof/interactor/v2) [![License](https://img.shields.io/github/license/screwyprof/interactor)](LICENSE)
+[![codecov](https://codecov.io/gh/screwyprof/interactor/graph/badge.svg)](https://codecov.io/gh/screwyprof/interactor) [![Go](https://github.com/screwyprof/interactor/actions/workflows/go.yml/badge.svg)](https://github.com/screwyprof/interactor/actions/workflows/go.yml) [![Vulnerabilities](https://github.com/screwyprof/interactor/actions/workflows/vulns.yml/badge.svg)](https://github.com/screwyprof/interactor/actions/workflows/vulns.yml) [![Release](https://img.shields.io/github/v/release/screwyprof/interactor)](https://github.com/screwyprof/interactor/releases/latest) [![Go Reference](https://pkg.go.dev/badge/github.com/screwyprof/interactor/v3.svg)](https://pkg.go.dev/github.com/screwyprof/interactor/v3) [![License](https://img.shields.io/github/license/screwyprof/interactor)](LICENSE)
 
-`Interactor` is a simple and efficient Go package for managing and dispatching requests to the appropriate use cases according to their request types. It is inspired by Uncle Bob's [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) and the interactor concept described therein.
+`Interactor` runs use cases and dispatches requests to them by request type. It is inspired by Uncle Bob's [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) and the interactor concept described there.
 
-The library is designed to be well-documented, thoroughly tested, and easy to use, ensuring maintainable and reliable code for your projects.
-
-## Features
-
-- Dispatcher for managing different use cases.
-- Flexible use cases as either pure functions or structures.
-- Well-documented and tested code.
+A use case is any type with a `Run` method from a request to a response. The compiler checks the types; there is no reflection on the call path.
 
 ## Installation
-To install the Interactor Library, run the following command:
+
+Requires Go 1.27 or later.
 
 ```bash
-go get github.com/screwyprof/interactor/v2@latest
+go get github.com/screwyprof/interactor/v3@latest
 ```
 
 ## Usage
@@ -29,56 +24,100 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/screwyprof/interactor/v2"
+	"github.com/screwyprof/interactor/v3"
 )
 
-// TestRequest represents a test request.
-type TestRequest struct{}
+type Hello struct{ Name string }
 
-// TestResponse represents a test response.
-type TestResponse struct {
-	Result int
-}
+type Greeting struct{ Text string }
 
-// UseCase is an example use case implementation.
-type UseCase struct {
-	Res int
-}
+// Greet is a use case: a type with a Run method from a request to a response.
+type Greet struct{}
 
-// Run runs the use case with the given request.
-func (uc UseCase) Run(ctx context.Context, req TestRequest, res *TestResponse) error {
-	res.Result = uc.Res
-	return nil
+func (Greet) Run(ctx context.Context, req Hello) (Greeting, error) {
+	return Greeting{Text: "Hello, " + req.Name + "!"}, nil
 }
 
 func main() {
-	// Create a use case.
-	useCaseRunner := &UseCase{Res: 42}
+	var d interactor.Dispatcher
 
-	// Create a new dispatcher and register the use case runner.
-	dispatcher := interactor.NewDispatcher()
-	dispatcher.Register(TestRequest{}, interactor.MustAdapt(useCaseRunner))
-
-	// Run the use case
-	var res TestResponse
-	if err := dispatcher.Run(context.Background(), TestRequest{}, &res); err != nil {
+	if err := d.Register(Greet{}); err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("The answer to life, the universe, and everything: %d\n", res.Result)
+	greeting, err := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(greeting.Text) // Hello, Gopher!
 }
+```
+
+- `Dispatch` names only the response type; the request type is inferred from the argument.
+- A plain function becomes a use case with `interactor.UseCaseFunc[Hello, Greeting](fn)`.
+- The zero `Dispatcher` is ready to use and safe for concurrent use.
+- Request types match exactly: `Hello` and `*Hello` are different types.
+
+### Errors
+
+| Error | When |
+|---|---|
+| `ErrAlreadyRegistered` | `Register` for a request type that already has a use case |
+| `ErrNilUseCase` | `Register` with a nil use case |
+| `ErrUseCaseNotFound` | `Dispatch` for a request type nothing is registered for |
+| `*ResponseTypeError` | `Dispatch` asks for a response type other than the registered one (match with `errors.As`) |
+| `ErrNilContext` | `Dispatch` with a nil context |
+
+Errors returned by the use case itself come back unchanged.
+
+## Testing your use cases
+
+The `testdsl` package reads tests as Given/When/Then:
+
+```go
+import "github.com/screwyprof/interactor/v3/testdsl"
+
+func TestGreet(t *testing.T) {
+	testdsl.Test(t,
+		Greet{},                                                // given this use case
+		Hello{Name: "Gopher"},                                  // when it runs with this request
+		testdsl.ThenReturns(Greeting{Text: "Hello, Gopher!"}), // then it returns this
+	)
+}
+```
+
+`testdsl.ThenFails[Greeting](err)` checks the error instead. `testdsl` uses [testify](https://github.com/stretchr/testify).
+
+## Migrating from v2
+
+v3 replaces the reflection-based API with generics. Most of what v2 checked at runtime is now a compile error.
+
+| v2 | v3 |
+|---|---|
+| `Run(ctx, req Req, res *Res) error` | `Run(ctx, req Req) (Res, error)` |
+| `interactor.NewDispatcher()` | `var d interactor.Dispatcher` (or `NewDispatcher()`) |
+| `d.Register(Req{}, interactor.MustAdapt(uc))` | `err := d.Register(uc)` |
+| `d.Register(Req{}, interactor.Must(interactor.Func(fn)))` | `err := d.Register(interactor.UseCaseFunc[Req, Res](fn))` |
+| `var res Res; err := d.Run(ctx, req, &res)` | `res, err := d.Dispatch[Res](ctx, req)` |
+| registering a type twice overwrote the first | `ErrAlreadyRegistered` |
+| `ErrUseCaseRunnerNotFound` | `ErrUseCaseNotFound` |
+| `ErrResultTypeMismatch` | `*ResponseTypeError` |
+
+To move one use case at a time, wrap a v2-style one with `FromOutParam`; it registers unchanged:
+
+```go
+err := d.Register(interactor.FromOutParam(legacy.Run))
 ```
 
 ## Documentation
 
-For more information and detailed documentation, please refer to the GoDoc documentation:
-
-[Interactor Library GoDoc](https://pkg.go.dev/github.com/screwyprof/interactor/v2)
+[pkg.go.dev/github.com/screwyprof/interactor/v3](https://pkg.go.dev/github.com/screwyprof/interactor/v3)
 
 ## Contributing
 
-Contributions are welcome! If you have any suggestions, bug reports, or feature requests, please open a new issue or submit a pull request.
+Contributions are welcome. Run `make check` before opening a pull request: it runs the tests with a 100% coverage floor, the linters, a `go mod tidy` check and `govulncheck`, the same gates as CI.
 
 ## License
 
-The Interactor Library is released under the [MIT License](https://opensource.org/licenses/MIT).
+Released under the [MIT License](LICENSE).

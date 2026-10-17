@@ -1,90 +1,58 @@
-// Package testdsl provides a Given/When/Then DSL for testing use case runners.
+// Package testdsl is a small Given/When/Then DSL for testing your own use cases.
+//
+// Import it from your tests when you want each test to read as a scenario:
+//
+//	func TestGreet(t *testing.T) {
+//		testdsl.Test(t,
+//			Greet{},                      // given this use case
+//			Hello{Name: "Gopher"},        // when it runs with this request
+//			testdsl.ThenReturns(Greeting{Text: "Hello, Gopher!"}), // then
+//		)
+//	}
+//
+// [ThenFails] checks the error instead. Write your own [Then] for anything else; it is a plain
+// func(tb, got, err).
+//
+// It uses testify, which your tests then depend on too.
 package testdsl
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/screwyprof/interactor/v2"
+	"github.com/screwyprof/interactor/v3"
 )
 
-// GivenFn is a test init function.
-type GivenFn func() interactor.UseCaseRunner
+// Then checks what a use case returned.
+type Then[Res any] func(tb testing.TB, got Res, err error)
 
-// WhenFn is a use case runner function.
-type WhenFn func(useCaseRunner interactor.UseCaseRunner) (interactor.Response, error)
-
-// ThenFn prepares the Checker.
-type ThenFn func(t testing.TB) Checker
-
-// Checker asserts the given results.
-type Checker func(resp interactor.Response, err error)
-
-// InteractorTester defines a Test Suite.
-type InteractorTester func(given GivenFn, when WhenFn, then ThenFn)
-
-// Test runs the test.
+// Test runs the given use case with the when request and checks the result with then.
 //
-// Example:
-//
-//	want := &TestResponse{result: 123}
-//	useCaseRunner := &ConcreteUseCase{}
-//	adaptedUseCaseRunner := interactor.Must(interactor.Func(useCaseRunner.Run))
-//
-//	Test(t)(
-//		Given(adaptedUseCaseRunner.Run),
-//		When(context.Background(), TestRequest{123}, &TestResponse{}),
-//		Then(want))
-func Test(tb testing.TB) InteractorTester {
+//	testdsl.Test(t, Greet{}, Hello{Name: "Gopher"}, testdsl.ThenReturns(Greeting{Text: "Hello, Gopher!"}))
+func Test[Req, Res any](tb testing.TB, given interactor.UseCase[Req, Res], when Req, then Then[Res]) {
 	tb.Helper()
 
-	return func(given GivenFn, when WhenFn, then ThenFn) {
+	got, err := given.Run(tb.Context(), when)
+	then(tb, got, err)
+}
+
+// ThenReturns expects the use case to succeed with want.
+func ThenReturns[Res any](want Res) Then[Res] {
+	return func(tb testing.TB, got Res, err error) {
 		tb.Helper()
 
-		then(tb)(when(given()))
+		require.NoError(tb, err)
+		assert.Equal(tb, want, got)
 	}
 }
 
-// Given prepares the given use case runner for testing.
-func Given(useCaseRunner interactor.UseCaseRunnerFn) GivenFn {
-	return func() interactor.UseCaseRunner {
-		return useCaseRunner
-	}
-}
-
-// When runs the use case.
-func When(ctx context.Context, req interactor.Request, res interactor.Response) WhenFn {
-	return func(useCaseRunner interactor.UseCaseRunner) (interactor.Response, error) {
-		return res, useCaseRunner.Run(ctx, req, res)
-	}
-}
-
-// Then asserts that the expected response is returned.
-func Then(want interactor.Response) ThenFn {
-	return func(tb testing.TB) Checker {
+// ThenFails expects the use case to fail with an error matching want, as by [errors.Is].
+func ThenFails[Res any](want error) Then[Res] {
+	return func(tb testing.TB, _ Res, err error) {
 		tb.Helper()
 
-		return func(got interactor.Response, err error) {
-			tb.Helper()
-
-			require.NoError(tb, err)
-			assert.Equal(tb, want, got)
-		}
-	}
-}
-
-// ThenFailWith asserts that the expected error occurred.
-func ThenFailWith(want error) ThenFn {
-	return func(tb testing.TB) Checker {
-		tb.Helper()
-
-		return func(_ interactor.Response, err error) {
-			tb.Helper()
-
-			assert.ErrorIs(tb, err, want)
-		}
+		require.ErrorIs(tb, err, want)
 	}
 }
