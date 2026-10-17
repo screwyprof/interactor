@@ -67,9 +67,7 @@ func BenchmarkDispatcher(b *testing.B) {
 	req := TestRequest{id: 123}
 	ctx := context.Background()
 
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_ = dispatcher.Run(ctx, req, &res)
 	}
 }

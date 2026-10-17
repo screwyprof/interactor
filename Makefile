@@ -28,6 +28,11 @@ lint-all: ## run linters over the whole tree, unfiltered
 	@echo -e "$(OK_COLOR)==> Linting$(NO_COLOR)"
 	$(GOLANGCI) run ./... --new-from-rev="" --new-from-merge-base=""
 
+# Applies the auto-fixes linters offer (modernize, usetesting, wsl_v5, ...) across the whole tree.
+lint-fix: ## apply linter auto-fixes
+	@echo -e "$(OK_COLOR)==> Applying lint fixes$(NO_COLOR)"
+	$(GOLANGCI) run ./... --fix --new-from-rev="" --new-from-merge-base=""
+
 # CI only: renders the findings `lint` reports as annotations on the pull request diff.
 lint-annotate:
 	@$(GOLANGCI) run ./... --output.text.print-issued-lines=false --output.text.colors=false --show-stats=false \
@@ -52,4 +57,4 @@ help: ## show this help screen
 # To avoid unintended conflicts with file names, always add to .PHONY
 # unless there is a reason not to.
 # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
-.PHONY: all fmt lint lint-all lint-annotate test coverage clean help
+.PHONY: all fmt lint lint-all lint-fix lint-annotate test coverage clean help

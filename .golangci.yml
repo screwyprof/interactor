@@ -44,6 +44,7 @@ linters:
     - maintidx
     - makezero
     - misspell
+    - modernize
     - nakedret
     - nestif
     - nilerr
