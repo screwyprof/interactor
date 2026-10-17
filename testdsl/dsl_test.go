@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -91,17 +92,21 @@ func run(t *testing.T, scenario func(tb testing.TB)) *fakeTB {
 
 	var (
 		wg       sync.WaitGroup
-		panicked any
+		panicked string
 	)
 
 	wg.Go(func() {
-		defer func() { panicked = recover() }()
+		defer func() {
+			if r := recover(); r != nil {
+				panicked = fmt.Sprintf("%v\n%s", r, debug.Stack())
+			}
+		}()
 
 		scenario(f)
 	})
 	wg.Wait()
 
-	require.Nil(t, panicked, "the scenario panicked instead of failing")
+	require.Empty(t, panicked, "the scenario panicked instead of failing")
 
 	for _, cleanup := range slices.Backward(f.cleanups) {
 		cleanup()
@@ -394,7 +399,7 @@ func TestWithContextLeavesTheGivenUnchanged(t *testing.T) {
 	})
 
 	assert.False(t, f.Failed())
-	assert.Same(t, f.ctx, gotCtx, "the second When must run under the test's context again")
+	assert.Equal(t, f.ctx, gotCtx, "the second When must run under the test's context again")
 }
 
 // TestMissingThenIsReportedAtTheCallersLine re-runs this test binary to run

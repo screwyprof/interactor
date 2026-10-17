@@ -57,6 +57,29 @@ func TestFromOutParamReturnsNoPartialResponseOnError(t *testing.T) {
 	assert.Zero(t, got, "a failed use case's response must not leak through")
 }
 
+func TestFromOutParamStartsEachCallFromAZeroResponse(t *testing.T) {
+	t.Parallel()
+
+	// Writes only when asked to: a second call must not see what the first one wrote.
+	writeOnce := func(_ context.Context, q Question, res *Answer) error {
+		if q.ID > 0 {
+			res.Value = q.ID
+		}
+
+		return nil
+	}
+
+	uc := interactor.FromOutParam(writeOnce)
+
+	first, err := uc.Run(t.Context(), Question{ID: 7})
+	require.NoError(t, err)
+	require.Equal(t, Answer{Value: 7}, first)
+
+	second, err := uc.Run(t.Context(), Question{})
+	require.NoError(t, err)
+	assert.Zero(t, second, "each call must start from a zero response")
+}
+
 func TestUseCasesRunUnderTheCallersContext(t *testing.T) {
 	t.Parallel()
 
@@ -96,26 +119,3 @@ func TestUseCasesRunUnderTheCallersContext(t *testing.T) {
 }
 
 type ctxKey struct{}
-
-func TestFromOutParamStartsEachCallFromAZeroResponse(t *testing.T) {
-	t.Parallel()
-
-	// Writes only when asked to: a second call must not see what the first one wrote.
-	writeOnce := func(_ context.Context, q Question, res *Answer) error {
-		if q.ID > 0 {
-			res.Value = q.ID
-		}
-
-		return nil
-	}
-
-	uc := interactor.FromOutParam(writeOnce)
-
-	first, err := uc.Run(t.Context(), Question{ID: 7})
-	require.NoError(t, err)
-	require.Equal(t, Answer{Value: 7}, first)
-
-	second, err := uc.Run(t.Context(), Question{})
-	require.NoError(t, err)
-	assert.Zero(t, second, "each call must start from a zero response")
-}
