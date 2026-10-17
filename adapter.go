@@ -138,7 +138,9 @@ func newRunner(fnValue reflect.Value) (UseCaseRunnerFn, error) {
 			return err
 		}
 
-		in := [3]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req), reflect.ValueOf(resp)}
+		// The parameter is context.Context itself, so a Value of that type lets Call skip its
+		// per-call interface conversion check.
+		in := [3]reflect.Value{reflect.ValueOf(&ctx).Elem(), reflect.ValueOf(req), reflect.ValueOf(resp)}
 		if err, ok := reflect.TypeAssert[error](fnValue.Call(in[:])[0]); ok && err != nil {
 			return err
 		}
