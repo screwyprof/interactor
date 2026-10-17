@@ -29,3 +29,5 @@ type Ticket[K any] struct{ N int }
 type Stamp[K any] struct{}
 
 func (Stamp[K]) Run(_ context.Context, t Ticket[K]) (Ticket[K], error) { return t, nil }
+
+type ctxKey struct{}

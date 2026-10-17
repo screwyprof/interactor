@@ -40,7 +40,6 @@ all: fmt check ## format code, then run every gate
 
 fmt: ## format go files
 	@echo -e "$(OK_COLOR)==> Formatting$(NO_COLOR)"
-	@test -n "$(GO_FILES)" || { echo "no Go files: this needs a git checkout"; exit 1; }
 	@$(GOLANGCI) fmt $(GO_FILES)
 
 lint: ## run linters for current changes
@@ -86,7 +85,6 @@ vulns: ## report known vulnerabilities reachable from this module
 # back-to-back runs then timed out every dispatcher mutant; at 30 none do.
 mutate: ## run mutation testing; fails unless every mutant is killed
 	@echo -e "$(OK_COLOR)==> Mutation testing$(NO_COLOR)"
-	@test -n "$(GO_FILES)" || { echo "no Go files: this needs a git checkout"; exit 1; }
 	@tmp=$$(mktemp -d) && trap 'rm -rf "$$tmp"' EXIT; \
 	 $(GIT_LS) -z | while IFS= read -r -d '' f; do if [ -e "$$f" ]; then printf '%s\0' "$$f"; fi; done \
 		| tar --null -cf - -T - | (cd "$$tmp" && tar -xf -); \

@@ -2,7 +2,6 @@ package interactor_test
 
 import (
 	"context"
-	"reflect"
 	"sync"
 	"testing"
 
@@ -89,6 +88,54 @@ func TestDispatch(t *testing.T) {
 		require.ErrorIs(t, err, interactor.ErrUseCaseNotFound)
 	})
 
+	t.Run("runs a use case registered by pointer", func(t *testing.T) {
+		t.Parallel()
+
+		var d interactor.Dispatcher
+		d.MustRegister(&AnswerQuestion{})
+
+		got, err := d.Dispatch[Answer](t.Context(), Question{ID: 21})
+
+		require.NoError(t, err)
+		assert.Equal(t, Answer{Value: 42}, got)
+	})
+
+	t.Run("returns the use case's response together with its error", func(t *testing.T) {
+		t.Parallel()
+
+		partial := interactor.UseCaseFunc[Question, Answer](func(context.Context, Question) (Answer, error) {
+			return Answer{Value: 7}, errBoom
+		})
+
+		var d interactor.Dispatcher
+		d.MustRegister(partial)
+
+		got, err := d.Dispatch[Answer](t.Context(), Question{})
+
+		require.ErrorIs(t, err, errBoom)
+		assert.Equal(t, Answer{Value: 7}, got)
+	})
+
+	t.Run("runs the use case under the caller's context", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := context.WithValue(t.Context(), ctxKey{}, "marker")
+
+		readCtx := interactor.UseCaseFunc[Question, Answer](func(ctx context.Context, _ Question) (Answer, error) {
+			v, _ := ctx.Value(ctxKey{}).(string)
+
+			return Answer{Value: len(v)}, nil
+		})
+
+		var d interactor.Dispatcher
+		d.MustRegister(readCtx)
+
+		got, err := d.Dispatch[Answer](ctx, Question{})
+
+		require.NoError(t, err)
+		assert.Equal(t, Answer{Value: len("marker")}, got)
+	})
+
 	t.Run("fails when asked for a different response type", func(t *testing.T) {
 		t.Parallel()
 
@@ -97,26 +144,9 @@ func TestDispatch(t *testing.T) {
 
 		_, err := d.Dispatch[string](t.Context(), Question{})
 
-		var typeErr *interactor.ResponseTypeError
-		require.ErrorAs(t, err, &typeErr)
-		assert.Equal(t, reflect.TypeFor[Question](), typeErr.Request)
-		assert.Equal(t, reflect.TypeFor[Answer](), typeErr.Registered)
-		assert.Equal(t, reflect.TypeFor[string](), typeErr.Requested)
-		assert.EqualError(t, err,
-			"interactor: use case for interactor_test.Question returns interactor_test.Answer, not string")
-	})
-
-	t.Run("rejects a nil context", func(t *testing.T) {
-		t.Parallel()
-
-		var d interactor.Dispatcher
-		d.MustRegister(AnswerQuestion{})
-
-		var nilCtx context.Context // a nil context is what is under test
-
-		_, err := d.Dispatch[Answer](nilCtx, Question{})
-
-		require.ErrorIs(t, err, interactor.ErrNilContext)
+		require.ErrorIs(t, err, interactor.ErrResponseTypeMismatch)
+		assert.EqualError(t, err, "interactor: registered use case returns a different response type: "+
+			"the use case for interactor_test.Question does not return string")
 	})
 }
 
@@ -167,7 +197,7 @@ func TestDispatcherIsSafeForConcurrentUse(t *testing.T) {
 	// Eight distinct request types register and dispatch at once. A lost update between two
 	// registrations, or a published map changed in place, leaves a type unregistered or races.
 	// One round can miss the interleaving, so the race is repeated on a fresh dispatcher.
-	for range 20 {
+	for range 200 {
 		var (
 			d     interactor.Dispatcher
 			start = make(chan struct{})

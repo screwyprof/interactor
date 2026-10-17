@@ -83,17 +83,16 @@ A component that runs a single use case can depend on it directly, since `UseCas
 
 ### Errors
 
-Most of these come back wrapped with the request type in the message, so match them with `errors.Is`, not `==`, and `*ResponseTypeError` with `errors.AsType`.
+They come back wrapped with the types involved in the message, so match them with `errors.Is`, not `==`.
 
 | Error | When |
 |---|---|
 | `ErrAlreadyRegistered` | `Register` for a request type that already has a use case (`MustRegister` panics with it) |
 | `ErrNilUseCase` | `Register` with a nil use case (`MustRegister` panics with it) |
 | `ErrUseCaseNotFound` | `Dispatch` for a request type nothing is registered for |
-| `*ResponseTypeError` | `Dispatch` asks for a response type other than the registered one (match with `errors.AsType[*interactor.ResponseTypeError]`) |
-| `ErrNilContext` | `Dispatch` with a nil context |
+| `ErrResponseTypeMismatch` | `Dispatch` asks for a response type other than the registered use case's |
 
-Errors returned by the use case itself come back unchanged.
+Errors returned by the use case itself come back unchanged. The context is passed to the use case as given.
 
 ## Testing your use cases
 
@@ -182,8 +181,9 @@ v3 replaces the reflection-based API with generics. Most of what v2 checked at r
 | registering a type twice overwrote the first | `ErrAlreadyRegistered`, and `MustRegister` panics |
 | a nil runner failed at `Run` with `ErrUseCaseRunnerNotFound` | `ErrNilUseCase` at `Register` |
 | `ErrUseCaseRunnerNotFound` | `ErrUseCaseNotFound` |
-| `ErrResultTypeMismatch` | `*ResponseTypeError` |
+| `ErrResultTypeMismatch` | `ErrResponseTypeMismatch` |
 | `Request`, `Response`, `Func`, `Adapt`, `Must`, `MustAdapt` and their runtime errors (`ErrRequestTypeMismatch`, `ErrInvalidReturnType`, …) | removed: the compiler checks what they checked at runtime |
+| `ErrNilContext` | removed: a nil context reaches the use case, as in any Go call |
 | `testdsl.Test(t)(Given(r), When(ctx, req, &res), Then(want))` and its `InteractorTester`, `GivenFn`, `WhenFn`, `ThenFn`, `Checker` types | `testdsl.Test(t).Given(uc).When(ctx, req).Then(want)`, checked at compile time; `When` takes the context as before but no `&res`; `ThenFailWith(err)` now needs a non-nil error and stops the test on a mismatch |
 
 To move one use case at a time, wrap a v2-style `Run` in a `UseCaseFunc` and register that:

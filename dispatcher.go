@@ -14,15 +14,8 @@ import (
 // The zero value is ready to use. A Dispatcher is safe for concurrent use and must not be copied
 // after first use.
 type Dispatcher struct {
-	mu       sync.Mutex                             // serialises Register
-	useCases atomic.Pointer[map[reflect.Type]entry] // read lock-free; replaced, never modified
-}
-
-// entry keeps the use case with its response type, so a mismatched Dispatch can say what was
-// registered.
-type entry struct {
-	useCase  any
-	response reflect.Type
+	mu       sync.Mutex                           // serialises Register
+	useCases atomic.Pointer[map[reflect.Type]any] // read lock-free; replaced, never modified
 }
 
 // Register adds uc as the use case for requests of type Req.
@@ -43,7 +36,7 @@ func (d *Dispatcher) Register[Req, Res any](uc UseCase[Req, Res]) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	var current map[reflect.Type]entry
+	var current map[reflect.Type]any
 	if p := d.useCases.Load(); p != nil {
 		current = *p
 	}
@@ -55,9 +48,9 @@ func (d *Dispatcher) Register[Req, Res any](uc UseCase[Req, Res]) error {
 	// Copy on write: dispatching reads the published map without a lock, so it is never modified.
 	// Sized to the existing entries: the new one may grow it once, which at startup costs nothing
 	// measurable.
-	next := make(map[reflect.Type]entry, len(current))
+	next := make(map[reflect.Type]any, len(current))
 	maps.Copy(next, current)
-	next[reqType] = entry{useCase: uc, response: reflect.TypeFor[Res]()}
+	next[reqType] = uc
 
 	d.useCases.Store(&next)
 
@@ -74,34 +67,32 @@ func (d *Dispatcher) Register[Req, Res any](uc UseCase[Req, Res]) error {
 // variable is looked up as that interface type, not its dynamic type. Res must be exactly the
 // registered use case's response type.
 //
-// It returns [ErrNilContext] for a nil ctx, [ErrUseCaseNotFound] if nothing is registered for
-// Req, and a [*ResponseTypeError] if the registered use case returns a type other than Res.
-// Errors from the use case itself are returned unchanged, including any it gets from dispatching
-// further requests, together with whatever response it returned alongside the error.
+// It returns an error wrapping [ErrUseCaseNotFound] if nothing is registered for Req, or
+// [ErrResponseTypeMismatch] if the registered use case returns a type other than Res. ctx is passed
+// to the use case as given. Errors from the use case itself are returned unchanged, including any
+// it gets from dispatching further requests, together with whatever response it returned alongside
+// the error.
 func (d *Dispatcher) Dispatch[Res, Req any](ctx context.Context, req Req) (Res, error) {
 	var zero Res
-
-	if ctx == nil {
-		return zero, ErrNilContext
-	}
 
 	reqType := reflect.TypeFor[Req]()
 
 	var (
-		e  entry
-		ok bool
+		registered any
+		ok         bool
 	)
 	if m := d.useCases.Load(); m != nil {
-		e, ok = (*m)[reqType]
+		registered, ok = (*m)[reqType]
 	}
 
 	if !ok {
 		return zero, fmt.Errorf("%w: %v", ErrUseCaseNotFound, reqType)
 	}
 
-	uc, ok := e.useCase.(UseCase[Req, Res])
+	uc, ok := registered.(UseCase[Req, Res])
 	if !ok {
-		return zero, &ResponseTypeError{Request: reqType, Registered: e.response, Requested: reflect.TypeFor[Res]()}
+		return zero, fmt.Errorf("%w: the use case for %v does not return %v",
+			ErrResponseTypeMismatch, reqType, reflect.TypeFor[Res]())
 	}
 
 	return uc.Run(ctx, req) //nolint:wrapcheck // the use case's own error, returned unchanged as documented.

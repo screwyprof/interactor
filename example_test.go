@@ -83,21 +83,3 @@ func ExampleDispatcher_Register() {
 	// Output:
 	// true
 }
-
-func ExampleResponseTypeError() {
-	var d interactor.Dispatcher
-
-	d.MustRegister(Greet{})
-
-	// Greet returns a Greeting, not a string.
-	_, err := d.Dispatch[string](context.Background(), Hello{Name: "Gopher"})
-
-	if typeErr, ok := errors.AsType[*interactor.ResponseTypeError](err); ok {
-		fmt.Println("registered:", typeErr.Registered)
-		fmt.Println("requested:", typeErr.Requested)
-	}
-
-	// Output:
-	// registered: interactor_test.Greeting
-	// requested: string
-}
