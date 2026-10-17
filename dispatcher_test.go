@@ -20,7 +20,7 @@ func TestDispatch(t *testing.T) {
 		t.Parallel()
 
 		var d interactor.Dispatcher
-		mustRegister(t, &d, AnswerQuestion{})
+		d.MustRegister(AnswerQuestion{})
 
 		got, err := d.Dispatch[Answer](t.Context(), Question{ID: 21})
 
@@ -32,7 +32,7 @@ func TestDispatch(t *testing.T) {
 		t.Parallel()
 
 		var d interactor.Dispatcher
-		mustRegister(t, &d, AnswerQuestion{err: errBoom})
+		d.MustRegister(AnswerQuestion{err: errBoom})
 
 		_, err := d.Dispatch[Answer](t.Context(), Question{})
 
@@ -54,7 +54,7 @@ func TestDispatch(t *testing.T) {
 		t.Parallel()
 
 		var d interactor.Dispatcher
-		mustRegister(t, &d, AnswerQuestion{})
+		d.MustRegister(AnswerQuestion{})
 
 		_, err := d.Dispatch[Answer](t.Context(), &Question{})
 
@@ -65,7 +65,7 @@ func TestDispatch(t *testing.T) {
 		t.Parallel()
 
 		var d interactor.Dispatcher
-		mustRegister(t, &d, AnswerQuestion{})
+		d.MustRegister(AnswerQuestion{})
 
 		_, err := d.Dispatch[string](t.Context(), Question{})
 
@@ -82,7 +82,7 @@ func TestDispatch(t *testing.T) {
 		t.Parallel()
 
 		var d interactor.Dispatcher
-		mustRegister(t, &d, AnswerQuestion{})
+		d.MustRegister(AnswerQuestion{})
 
 		var nilCtx context.Context // a nil context is what is under test
 
@@ -99,7 +99,7 @@ func TestRegister(t *testing.T) {
 		t.Parallel()
 
 		var d interactor.Dispatcher
-		mustRegister(t, &d, AnswerQuestion{})
+		d.MustRegister(AnswerQuestion{})
 
 		err := d.Register(AnswerQuestion{err: errBoom})
 
@@ -137,7 +137,7 @@ func TestNewDispatcher(t *testing.T) {
 	t.Parallel()
 
 	d := interactor.NewDispatcher()
-	mustRegister(t, d, AnswerQuestion{})
+	d.MustRegister(AnswerQuestion{})
 
 	got, err := d.Dispatch[Answer](t.Context(), Question{ID: 1})
 
@@ -175,7 +175,7 @@ func TestDispatcherIsSafeForConcurrentUse(t *testing.T) {
 
 func BenchmarkDispatch(b *testing.B) {
 	var d interactor.Dispatcher
-	mustRegister(b, &d, AnswerQuestion{})
+	d.MustRegister(AnswerQuestion{})
 
 	ctx := b.Context()
 
@@ -200,4 +200,49 @@ func BenchmarkDirect(b *testing.B) {
 	for b.Loop() {
 		_, _ = uc.Run(ctx, Question{ID: 1})
 	}
+}
+
+func TestMustRegister(t *testing.T) {
+	t.Parallel()
+
+	t.Run("registers the use case", func(t *testing.T) {
+		t.Parallel()
+
+		var d interactor.Dispatcher
+
+		d.MustRegister(AnswerQuestion{})
+
+		got, err := d.Dispatch[Answer](t.Context(), Question{ID: 21})
+		require.NoError(t, err)
+		assert.Equal(t, Answer{Value: 42}, got)
+	})
+
+	t.Run("panics with the registration error", func(t *testing.T) {
+		t.Parallel()
+
+		var d interactor.Dispatcher
+		d.MustRegister(AnswerQuestion{})
+
+		assertPanicsWith(t, interactor.ErrAlreadyRegistered, func() { d.MustRegister(AnswerQuestion{}) })
+		assertPanicsWith(
+			t,
+			interactor.ErrNilUseCase,
+			func() { d.MustRegister(interactor.UseCase[Question, Answer](nil)) },
+		)
+	})
+}
+
+// assertPanicsWith checks fn panics with an error matching want, as by errors.Is.
+func assertPanicsWith(t *testing.T, want error, fn func()) {
+	t.Helper()
+
+	defer func() {
+		t.Helper()
+
+		err, ok := recover().(error)
+		require.True(t, ok, "expected a panic with an error value")
+		require.ErrorIs(t, err, want)
+	}()
+
+	fn()
 }

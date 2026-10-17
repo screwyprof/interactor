@@ -99,3 +99,11 @@ func isNil(uc any) bool {
 
 	return (v.Kind() == reflect.Pointer || v.Kind() == reflect.Func) && v.IsNil()
 }
+
+// MustRegister is like [Dispatcher.Register] but panics if registration fails. Use it when wiring
+// an application at startup, where a duplicate or nil use case is a programming mistake.
+func (d *Dispatcher) MustRegister[Req, Res any](uc UseCase[Req, Res]) {
+	if err := d.Register(uc); err != nil {
+		panic(err)
+	}
+}

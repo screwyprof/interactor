@@ -40,10 +40,7 @@ func (Greet) Run(ctx context.Context, req Hello) (Greeting, error) {
 
 func main() {
 	var d interactor.Dispatcher
-
-	if err := d.Register(Greet{}); err != nil {
-		log.Fatal(err)
-	}
+	d.MustRegister(Greet{})
 
 	greeting, err := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
 	if err != nil {
@@ -54,6 +51,7 @@ func main() {
 }
 ```
 
+- `MustRegister` panics on a wiring mistake, which is what you want at startup; `Register` returns the error instead.
 - `Dispatch` names only the response type; the request type is inferred from the argument.
 - A plain function becomes a use case with `interactor.UseCaseFunc[Hello, Greeting](fn)`.
 - The zero `Dispatcher` is ready to use and safe for concurrent use.
@@ -86,8 +84,8 @@ A component that runs a single use case can depend on it directly, since `UseCas
 
 | Error | When |
 |---|---|
-| `ErrAlreadyRegistered` | `Register` for a request type that already has a use case |
-| `ErrNilUseCase` | `Register` with a nil use case |
+| `ErrAlreadyRegistered` | `Register` for a request type that already has a use case (`MustRegister` panics with it) |
+| `ErrNilUseCase` | `Register` with a nil use case (`MustRegister` panics with it) |
 | `ErrUseCaseNotFound` | `Dispatch` for a request type nothing is registered for |
 | `*ResponseTypeError` | `Dispatch` asks for a response type other than the registered one (match with `errors.As`) |
 | `ErrNilContext` | `Dispatch` with a nil context |
@@ -102,32 +100,37 @@ Use cases are plain types, so any testing style works. The `testdsl` package is 
 import "github.com/screwyprof/interactor/v3/testdsl"
 
 func TestGreet(t *testing.T) {
-	testdsl.Test(t,
-		Greet{},                                               // given this use case
-		Hello{Name: "Gopher"},                                 // when it runs with this request
-		testdsl.ThenReturns(Greeting{Text: "Hello, Gopher!"}), // then it returns this
-	)
+	testdsl.Test(t).
+		Given(Greet{}).
+		When(Hello{Name: "Gopher"}).
+		Then(Greeting{Text: "Hello, Gopher!"})
 }
 ```
 
-Expect an error with `ThenFails`, which matches like `errors.Is`. Name the response type, since nothing else in the call mentions it:
+`Given` fixes the use case's request and response types for the rest of the chain, so `When` only accepts its request and `Then` only its response: `Then(42)` would not compile.
+
+Expect an error with `ThenFailWith`, which matches like `errors.Is`:
 
 ```go
 func TestGreetRejectsAnEmptyName(t *testing.T) {
-	testdsl.Test(t, Greet{}, Hello{}, testdsl.ThenFails[Greeting](ErrNoName))
+	testdsl.Test(t).
+		Given(Greet{}).
+		When(Hello{}).
+		ThenFailWith(ErrNoName)
 }
 ```
 
-For anything else, write your own `Then`; it is a plain `func(tb testing.TB, got Res, err error)`:
+For anything else, `ThenCheck` hands you the typed result:
 
 ```go
-func ThenMentions(name string) testdsl.Then[Greeting] {
-	return func(tb testing.TB, got Greeting, err error) {
-		tb.Helper()
-
-		require.NoError(tb, err)
-		assert.Contains(tb, got.Text, name)
-	}
+func TestGreetMentionsTheName(t *testing.T) {
+	testdsl.Test(t).
+		Given(Greet{}).
+		When(Hello{Name: "Gopher"}).
+		ThenCheck(func(tb testing.TB, got Greeting, err error) {
+			require.NoError(tb, err)
+			assert.Contains(tb, got.Text, "Gopher")
+		})
 }
 ```
 
@@ -137,21 +140,27 @@ Scenarios fit table-driven tests too:
 func TestGreetScenarios(t *testing.T) {
 	tests := map[string]struct {
 		when Hello
-		then testdsl.Then[Greeting]
+		then func(*testdsl.When[Hello, Greeting])
 	}{
-		"greets by name":      {Hello{Name: "Gopher"}, ThenMentions("Gopher")},
-		"rejects empty names": {Hello{}, testdsl.ThenFails[Greeting](ErrNoName)},
+		"greets by name": {
+			when: Hello{Name: "Gopher"},
+			then: func(w *testdsl.When[Hello, Greeting]) { w.Then(Greeting{Text: "Hello, Gopher!"}) },
+		},
+		"rejects empty names": {
+			when: Hello{},
+			then: func(w *testdsl.When[Hello, Greeting]) { w.ThenFailWith(ErrNoName) },
+		},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
-			testdsl.Test(t, Greet{}, tc.when, tc.then)
+			tc.then(testdsl.Test(t).Given(Greet{}).When(tc.when))
 		})
 	}
 }
 ```
 
-`testdsl` uses [testify](https://github.com/stretchr/testify), so your tests depend on it too.
+`When` runs the use case under the test's context (`t.Context()`). `testdsl` uses [testify](https://github.com/stretchr/testify), so your tests depend on it too.
 
 ## Migrating from v2
 
@@ -161,8 +170,8 @@ v3 replaces the reflection-based API with generics. Most of what v2 checked at r
 |---|---|
 | `Run(ctx, req Req, res *Res) error` | `Run(ctx, req Req) (Res, error)` |
 | `interactor.NewDispatcher()` | `var d interactor.Dispatcher` (or `NewDispatcher()`) |
-| `d.Register(Req{}, interactor.MustAdapt(uc))` | `err := d.Register(uc)` |
-| `d.Register(Req{}, interactor.Must(interactor.Func(fn)))` | `err := d.Register(interactor.UseCaseFunc[Req, Res](fn))` |
+| `d.Register(Req{}, interactor.MustAdapt(uc))` | `d.MustRegister(uc)` |
+| `d.Register(Req{}, interactor.Must(interactor.Func(fn)))` | `d.MustRegister(interactor.UseCaseFunc[Req, Res](fn))` |
 | `var res Res; err := d.Run(ctx, req, &res)` | `res, err := d.Dispatch[Res](ctx, req)` |
 | registering a type twice overwrote the first | `ErrAlreadyRegistered` |
 | `ErrUseCaseRunnerNotFound` | `ErrUseCaseNotFound` |
@@ -171,7 +180,7 @@ v3 replaces the reflection-based API with generics. Most of what v2 checked at r
 To move one use case at a time, wrap a v2-style one with `FromOutParam`; it registers unchanged:
 
 ```go
-err := d.Register(interactor.FromOutParam(legacy.Run))
+d.MustRegister(interactor.FromOutParam(legacy.Run))
 ```
 
 ## Documentation

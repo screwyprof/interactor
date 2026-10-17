@@ -1,17 +1,17 @@
-// Package testdsl is a small Given/When/Then DSL for testing your own use cases.
+// Package testdsl is a Given/When/Then DSL for testing your own use cases.
 //
 // Import it from your tests when you want each test to read as a scenario:
 //
 //	func TestGreet(t *testing.T) {
-//		testdsl.Test(t,
-//			Greet{},                      // given this use case
-//			Hello{Name: "Gopher"},        // when it runs with this request
-//			testdsl.ThenReturns(Greeting{Text: "Hello, Gopher!"}), // then
-//		)
+//		testdsl.Test(t).
+//			Given(Greet{}).
+//			When(Hello{Name: "Gopher"}).
+//			Then(Greeting{Text: "Hello, Gopher!"})
 //	}
 //
-// [ThenFails] checks the error instead. Write your own [Then] for anything else; it is a plain
-// func(tb, got, err).
+// Given fixes the request and response types for the rest of the chain, so When only accepts the
+// use case's request and Then only its response: a mismatched expectation does not compile.
+// [When.ThenFailWith] expects an error instead, and [When.ThenCheck] runs a check of your own.
 //
 // It uses testify, which your tests then depend on too.
 package testdsl
@@ -25,34 +25,62 @@ import (
 	"github.com/screwyprof/interactor/v3"
 )
 
-// Then checks what a use case returned.
-type Then[Res any] func(tb testing.TB, got Res, err error)
+// Scenario starts a test. Create one with [Test].
+type Scenario struct {
+	tb testing.TB
+}
 
-// Test runs the given use case with the when request and checks the result with then.
-//
-//	testdsl.Test(t, Greet{}, Hello{Name: "Gopher"}, testdsl.ThenReturns(Greeting{Text: "Hello, Gopher!"}))
-func Test[Req, Res any](tb testing.TB, given interactor.UseCase[Req, Res], when Req, then Then[Res]) {
+// Test starts a scenario reported to tb.
+func Test(tb testing.TB) *Scenario {
 	tb.Helper()
 
-	got, err := given.Run(tb.Context(), when)
-	then(tb, got, err)
+	return &Scenario{tb: tb}
 }
 
-// ThenReturns expects the use case to succeed with want.
-func ThenReturns[Res any](want Res) Then[Res] {
-	return func(tb testing.TB, got Res, err error) {
-		tb.Helper()
-
-		require.NoError(tb, err)
-		assert.Equal(tb, want, got)
-	}
+// Given is a scenario with the use case under test.
+type Given[Req, Res any] struct {
+	tb      testing.TB
+	useCase interactor.UseCase[Req, Res]
 }
 
-// ThenFails expects the use case to fail with an error matching want, as by [errors.Is].
-func ThenFails[Res any](want error) Then[Res] {
-	return func(tb testing.TB, _ Res, err error) {
-		tb.Helper()
+// Given sets the use case under test.
+func (s *Scenario) Given[Req, Res any](useCase interactor.UseCase[Req, Res]) *Given[Req, Res] {
+	return &Given[Req, Res]{tb: s.tb, useCase: useCase}
+}
 
-		require.ErrorIs(tb, err, want)
-	}
+// When is a scenario whose use case has run, holding what it returned.
+type When[Req, Res any] struct {
+	tb  testing.TB
+	got Res
+	err error
+}
+
+// When runs the use case with req under the test's context.
+func (g *Given[Req, Res]) When(req Req) *When[Req, Res] {
+	got, err := g.useCase.Run(g.tb.Context(), req)
+
+	return &When[Req, Res]{tb: g.tb, got: got, err: err}
+}
+
+// Then expects the use case to have succeeded and returned want.
+func (w *When[Req, Res]) Then(want Res) {
+	w.tb.Helper()
+
+	require.NoError(w.tb, w.err)
+	assert.Equal(w.tb, want, w.got)
+}
+
+// ThenFailWith expects the use case to have failed with an error matching want, as by [errors.Is].
+func (w *When[Req, Res]) ThenFailWith(want error) {
+	w.tb.Helper()
+
+	require.ErrorIs(w.tb, w.err, want)
+}
+
+// ThenCheck runs check on what the use case returned, for expectations Then and ThenFailWith do
+// not cover.
+func (w *When[Req, Res]) ThenCheck(check func(tb testing.TB, got Res, err error)) {
+	w.tb.Helper()
+
+	check(w.tb, w.got, w.err)
 }

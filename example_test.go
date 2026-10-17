@@ -22,11 +22,7 @@ func (Greet) Run(_ context.Context, req Hello) (Greeting, error) {
 func Example() {
 	var d interactor.Dispatcher
 
-	if err := d.Register(Greet{}); err != nil {
-		fmt.Println(err)
-
-		return
-	}
+	d.MustRegister(Greet{})
 
 	greeting, err := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
 	if err != nil {
@@ -62,11 +58,7 @@ func legacyGreet(_ context.Context, req Hello, res *Greeting) error {
 func ExampleFromOutParam() {
 	var d interactor.Dispatcher
 
-	if err := d.Register(interactor.FromOutParam(legacyGreet)); err != nil {
-		fmt.Println(err)
-
-		return
-	}
+	d.MustRegister(interactor.FromOutParam(legacyGreet))
 
 	greeting, _ := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
 
@@ -83,11 +75,7 @@ func ExampleUseCaseFunc() {
 
 	var d interactor.Dispatcher
 
-	if err := d.Register(shout); err != nil {
-		fmt.Println(err)
-
-		return
-	}
+	d.MustRegister(shout)
 
 	greeting, _ := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
 
@@ -95,4 +83,18 @@ func ExampleUseCaseFunc() {
 
 	// Output:
 	// HELLO, Gopher!
+}
+
+func ExampleDispatcher_Register() {
+	var d interactor.Dispatcher
+
+	d.MustRegister(Greet{})
+
+	// Register returns the error instead, for wiring that is decided at runtime.
+	err := d.Register(Greet{})
+
+	fmt.Println(errors.Is(err, interactor.ErrAlreadyRegistered))
+
+	// Output:
+	// true
 }

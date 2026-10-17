@@ -9,7 +9,7 @@
 // Register it on a [Dispatcher], then dispatch requests of that type:
 //
 //	var d interactor.Dispatcher
-//	if err := d.Register(Greet{}); err != nil { ... }
+//	d.MustRegister(Greet{}) // or Register, to handle the error
 //
 //	greeting, err := d.Dispatch[Greeting](ctx, Hello{Name: "Gopher"})
 //
