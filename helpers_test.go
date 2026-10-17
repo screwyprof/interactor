@@ -33,9 +33,10 @@ func legacyAnswerQuestion(_ context.Context, q Question, res *Answer) error {
 	return nil
 }
 
-type Shout struct{ Text string }
+// Ticket is a distinct request type per K, so tests can register many types.
+type Ticket[K any] struct{ N int }
 
-// Echo repeats the shout back.
-type Echo struct{}
+// Stamp answers a Ticket with itself.
+type Stamp[K any] struct{}
 
-func (Echo) Run(_ context.Context, s Shout) (Shout, error) { return s, nil }
+func (Stamp[K]) Run(_ context.Context, t Ticket[K]) (Ticket[K], error) { return t, nil }

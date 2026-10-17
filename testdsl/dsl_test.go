@@ -188,32 +188,33 @@ func TestThenCheck(t *testing.T) {
 		assert.Same(t, f, gotTB)
 		assert.Equal(t, Pong{OK: true}, gotRes)
 	})
-
-	t.Run("fails cleanly on a nil check", func(t *testing.T) {
-		t.Parallel()
-
-		f := run(t, func(tb testing.TB) {
-			tb.Helper()
-
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{}).ThenCheck(nil)
-		})
-
-		assert.True(t, f.stopped)
-		assert.Contains(t, strings.Join(f.errors, "\n"), "ThenCheck needs a check")
-	})
 }
 
-func TestThenFailWithNeedsAnError(t *testing.T) {
+func TestThenRejectsANilArgument(t *testing.T) {
 	t.Parallel()
 
-	f := run(t, func(tb testing.TB) {
-		tb.Helper()
+	cases := map[string]struct {
+		then func(w *testdsl.When[Pong])
+		want string
+	}{
+		"ThenFailWith": {func(w *testdsl.When[Pong]) { w.ThenFailWith(nil) }, "ThenFailWith needs the error to expect"},
+		"ThenCheck":    {func(w *testdsl.When[Pong]) { w.ThenCheck(nil) }, "ThenCheck needs a check"},
+	}
 
-		testdsl.Test(tb).Given(Pinger{}).When(Ping{Fail: true}).ThenFailWith(nil)
-	})
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	assert.True(t, f.stopped)
-	assert.Contains(t, strings.Join(f.errors, "\n"), "ThenFailWith needs the error to expect")
+			f := run(t, func(tb testing.TB) {
+				tb.Helper()
+
+				tc.then(testdsl.Test(tb).Given(Pinger{}).When(Ping{Fail: true}))
+			})
+
+			assert.True(t, f.stopped)
+			assert.Contains(t, strings.Join(f.errors, "\n"), tc.want)
+		})
+	}
 }
 
 func TestFailingThenReportsOnce(t *testing.T) {
@@ -231,7 +232,9 @@ func TestFailingThenReportsOnce(t *testing.T) {
 func TestMissingThen(t *testing.T) {
 	t.Parallel()
 
-	t.Run("names the scenario's line", func(t *testing.T) {
+	const missing = "testdsl: scenario has no Then, ThenFailWith or ThenCheck"
+
+	t.Run("is reported", func(t *testing.T) {
 		t.Parallel()
 
 		f := run(t, func(tb testing.TB) {
@@ -240,21 +243,33 @@ func TestMissingThen(t *testing.T) {
 			testdsl.Test(tb).Given(Pinger{}).When(Ping{})
 		})
 
-		require.Len(t, f.errors, 1)
-		assert.Contains(t, f.errors[0], "dsl_test.go:")
+		assert.Equal(t, []string{missing}, f.errors)
 	})
 
-	t.Run("stays quiet when the test already failed", func(t *testing.T) {
+	t.Run("is reported even after an earlier failure", func(t *testing.T) {
+		t.Parallel()
+
+		f := run(t, func(tb testing.TB) {
+			tb.Helper()
+
+			tb.Errorf("earlier failure")
+			testdsl.Test(tb).Given(Pinger{}).When(Ping{})
+		})
+
+		assert.Equal(t, []string{"earlier failure", missing}, f.errors)
+	})
+
+	t.Run("is reported when the test stopped before its Then", func(t *testing.T) {
 		t.Parallel()
 
 		f := run(t, func(tb testing.TB) {
 			tb.Helper()
 
 			testdsl.Test(tb).Given(Pinger{}).When(Ping{})
-			tb.Errorf("setup failed")
+			tb.FailNow()
 		})
 
-		assert.Equal(t, []string{"setup failed"}, f.errors)
+		assert.Equal(t, []string{missing}, f.errors)
 	})
 }
 
@@ -280,17 +295,48 @@ func TestGivenRejectsANilUseCase(t *testing.T) {
 	}
 }
 
-func TestWhenRunsUnderTheTestContext(t *testing.T) {
+func TestWhenContext(t *testing.T) {
 	t.Parallel()
 
-	var gotCtx context.Context
+	t.Run("is the test's context by default", func(t *testing.T) {
+		t.Parallel()
 
-	tb := &fakeTB{ctx: context.WithValue(t.Context(), ctxKey{}, "marker")}
+		var gotCtx context.Context
 
-	testdsl.Test(tb).Given(Pinger{gotCtx: &gotCtx}).When(Ping{}).Then(Pong{OK: true})
+		f := run(t, func(tb testing.TB) {
+			tb.Helper()
 
-	require.NotNil(t, gotCtx)
-	assert.Equal(t, "marker", gotCtx.Value(ctxKey{}))
+			testdsl.Test(tb).
+				Given(Pinger{gotCtx: &gotCtx}).
+				When(Ping{}). //nolint:contextcheck // which context reaches the use case is under test.
+				Then(Pong{OK: true})
+		})
+
+		assert.False(t, f.Failed())
+		assert.Same(t, f.ctx, gotCtx)
+	})
+
+	t.Run("is the one given WithContext", func(t *testing.T) {
+		t.Parallel()
+
+		var gotCtx context.Context
+
+		ctx := context.WithValue(t.Context(), ctxKey{}, "marker")
+
+		f := run(t, func(tb testing.TB) {
+			tb.Helper()
+
+			testdsl.Test(tb).
+				Given(Pinger{gotCtx: &gotCtx}).
+				WithContext(ctx).
+				When(Ping{}). //nolint:contextcheck // which context reaches the use case is under test.
+				Then(Pong{OK: true})
+		})
+
+		assert.False(t, f.Failed())
+		require.NotNil(t, gotCtx)
+		assert.Equal(t, "marker", gotCtx.Value(ctxKey{}))
+	})
 }
 
 type ctxKey struct{}

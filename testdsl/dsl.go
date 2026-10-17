@@ -12,13 +12,13 @@
 // Given fixes the request and response types for the rest of the chain, so When only accepts the
 // use case's request and Then only its response: a mismatched expectation does not compile.
 // [When.ThenFailWith] expects an error instead, and [When.ThenCheck] runs a check of your own.
+// [Given.WithContext] runs the use case under a context of your own instead of the test's.
 //
 // It uses testify, which your tests then depend on too.
 package testdsl
 
 import (
-	"path/filepath"
-	"runtime"
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,6 +44,7 @@ func Test(tb testing.TB) *Scenario {
 type Given[Req, Res any] struct {
 	tb      testing.TB
 	useCase interactor.UseCase[Req, Res]
+	ctx     context.Context //nolint:containedctx // carried from WithContext to When, within one scenario.
 }
 
 // Given sets the use case under test. A nil use case fails the test.
@@ -57,6 +58,14 @@ func (s *Scenario) Given[Req, Res any](useCase interactor.UseCase[Req, Res]) *Gi
 	return &Given[Req, Res]{tb: s.tb, useCase: useCase}
 }
 
+// WithContext runs the use case under ctx instead of the test's context, for use cases that read
+// values such as the current user from it.
+func (g *Given[Req, Res]) WithContext(ctx context.Context) *Given[Req, Res] {
+	g.ctx = ctx
+
+	return g
+}
+
 // When is a scenario whose use case has run, holding what it returned.
 type When[Res any] struct {
 	tb      testing.TB
@@ -65,23 +74,31 @@ type When[Res any] struct {
 	checked bool
 }
 
-// When runs the use case with req under the test's context. The scenario must end with one of the
-// Then methods, or the test fails naming the line that started it. Call When and Then from the
-// test's goroutine, as for any test that can fail. testdsl is for tests: each scenario is kept
-// until the test ends, so in benchmarks call the use case directly.
+// When runs the use case with req, under the test's context unless WithContext set one. The
+// scenario must end with one of the Then methods, or the test fails at the line that called When.
+// Call When and Then from the test's goroutine, as for any test that can fail. testdsl is for
+// tests: each scenario is kept until the test ends, so in benchmarks call the use case directly.
 func (g *Given[Req, Res]) When(req Req) *When[Res] {
 	g.tb.Helper()
 
-	_, file, line, _ := runtime.Caller(1)
+	ctx := g.ctx
+	if ctx == nil {
+		ctx = g.tb.Context()
+	}
 
-	got, err := g.useCase.Run(g.tb.Context(), req)
+	got, err := g.useCase.Run(ctx, req)
 	w := &When[Res]{tb: g.tb, got: got, err: err}
 
-	g.tb.Cleanup(func() {
-		// A test that already failed stopped before its Then; reporting that too would be noise.
-		if !w.checked && !g.tb.Failed() {
-			g.tb.Errorf("testdsl: scenario at %s:%d has no Then, ThenFailWith or ThenCheck",
-				filepath.Base(file), line)
+	// The cleanup only needs the TB and the flag, not the result, so it keeps nothing large alive.
+	// Marked as a helper, the testing package reports it at the line that called When, honouring
+	// the caller's own t.Helper() marks.
+	tb, checked := g.tb, &w.checked
+
+	tb.Cleanup(func() {
+		tb.Helper()
+
+		if !*checked {
+			tb.Errorf("testdsl: scenario has no Then, ThenFailWith or ThenCheck")
 		}
 	})
 

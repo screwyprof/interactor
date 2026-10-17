@@ -32,15 +32,15 @@ func TestDispatch(t *testing.T) {
 
 		var d interactor.Dispatcher
 		d.MustRegister(AnswerQuestion{})
-		d.MustRegister(Echo{})
+		d.MustRegister(Stamp[struct{}]{})
 
 		answer, err := d.Dispatch[Answer](t.Context(), Question{ID: 21})
 		require.NoError(t, err)
 		assert.Equal(t, Answer{Value: 42}, answer)
 
-		shout, err := d.Dispatch[Shout](t.Context(), Shout{Text: "hey"})
+		ticket, err := d.Dispatch[Ticket[struct{}]](t.Context(), Ticket[struct{}]{N: 7})
 		require.NoError(t, err)
-		assert.Equal(t, Shout{Text: "hey"}, shout)
+		assert.Equal(t, Ticket[struct{}]{N: 7}, ticket)
 	})
 
 	t.Run("returns the use case's error unchanged", func(t *testing.T) {
@@ -194,14 +194,6 @@ func TestDispatcherIsSafeForConcurrentUse(t *testing.T) {
 	}
 }
 
-// Ticket is a distinct request type per K, so tests can register many types.
-type Ticket[K any] struct{ N int }
-
-// Stamp answers a Ticket with itself.
-type Stamp[K any] struct{}
-
-func (Stamp[K]) Run(_ context.Context, t Ticket[K]) (Ticket[K], error) { return t, nil }
-
 // probe exercises one request type: race registers it and dispatches to it once start closes,
 // alongside other probes; served then checks it is still registered.
 type probe struct{ race, served func() }
@@ -220,10 +212,13 @@ func newProbe[K any](t *testing.T, d *interactor.Dispatcher, start <-chan struct
 				return
 			}
 
+			// One failure is enough: a lost registration would otherwise repeat it 50 times.
 			for range 50 {
 				got, err := d.Dispatch[Ticket[K]](t.Context(), Ticket[K]{N: 1})
-				if assert.NoError(t, err) {
-					assert.Equal(t, Ticket[K]{N: 1}, got)
+				if err != nil || got != (Ticket[K]{N: 1}) {
+					t.Errorf("dispatch %T: got %v, %v", Ticket[K]{}, got, err)
+
+					return
 				}
 			}
 		},
