@@ -3,26 +3,15 @@
 // This package allows registering use cases for different request types,
 // efficiently dispatching requests to the appropriate handlers.
 //
-// Example usage:
+// Register a use case for its request type, then run requests through the dispatcher:
 //
-//	func ExampleDispatcher() {
-//		// arrange
-//		useCaseRunner := &ConcreteUseCase{res: 42}
+//	dispatcher := interactor.NewDispatcher()
+//	dispatcher.Register(MyRequest{}, interactor.MustAdapt(&MyUseCase{}))
 //
-//		dispatcher := interactor.NewDispatcher()
-//		dispatcher.RegisterFn(TestRequest{}, interactor.Must(interactor.Adapt(useCaseRunner)))
+//	var res MyResponse
+//	err := dispatcher.Run(ctx, MyRequest{}, &res)
 //
-//		// act
-//		var res TestResponse
-//		if err := dispatcher.Run(context.Background(), TestRequest{}, &res); err != nil {
-//			log.Fatal(err)
-//		}
-//
-//		fmt.Printf("The answer to life the universe and everything: %d\n", res.result)
-//
-//		// Output:
-//		// The answer to life the universe and everything: 42
-//	}
+// See the examples for complete, runnable code.
 package interactor
 
 import "context"

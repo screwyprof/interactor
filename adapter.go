@@ -24,18 +24,7 @@ import (
 //
 //	func(ctx context.Context, req TestRequest, res *TestResponse) error
 func Func(fn any) (UseCaseRunnerFn, error) {
-	useCaseRunnerType := reflect.TypeOf(fn)
-	if err := ensureSignatureIsValid(useCaseRunnerType); err != nil {
-		return nil, err
-	}
-
-	return func(ctx context.Context, req Request, resp Response) error {
-		if err := ensureResultHasValidType(useCaseRunnerType, resp); err != nil {
-			return err
-		}
-
-		return invokeUseCaseRunner(fn, ctx, req, resp)
-	}, nil
+	return newRunner(reflect.ValueOf(fn))
 }
 
 // Must is a wrapper around Func which panics if an error occurs.
@@ -43,7 +32,7 @@ func Func(fn any) (UseCaseRunnerFn, error) {
 // It is useful for tests and for cases where you are sure that the signature is valid.
 // You can use it like this:
 //
-//	interactor.Must(interactor.Func(userCaseRunner.run))
+//	interactor.Must(interactor.Func(useCaseRunner.Run))
 func Must(fn UseCaseRunnerFn, err error) UseCaseRunnerFn {
 	if err != nil {
 		panic(err)
@@ -67,25 +56,34 @@ func Must(fn UseCaseRunnerFn, err error) UseCaseRunnerFn {
 //
 //	func (uc *UseCase) Run(ctx context.Context, req TestRequest, res *TestResponse) error
 func Adapt(runner any) (UseCaseRunnerFn, error) {
+	// A typed nil pointer still has Run in its method set, but calling it would dereference nil.
+	if runner == nil || isNilPointer(reflect.ValueOf(runner)) {
+		return nil, fmt.Errorf("%w: nil given", ErrUseCaseRunnerHasNoRunMethod)
+	}
+
 	fnValue := reflect.ValueOf(runner).MethodByName("Run")
 	if !fnValue.IsValid() {
 		return nil, fmt.Errorf("%w", ErrUseCaseRunnerHasNoRunMethod)
 	}
 
-	return Func(fnValue.Interface())
+	return newRunner(fnValue)
 }
 
 // MustAdapt is a wrapper around Adapt which panics if an error occurs.
 //
-// It is useful for tests and for cases where you are sure that the runner has a `Ru`n method with a valid signature.
+// It is useful for tests and for cases where you are sure that the runner has a `Run` method with a valid signature.
 // You can use it like this:
 //
-//	interactor.MustAdapt(userCaseRunner)
+//	interactor.MustAdapt(useCaseRunner)
 func MustAdapt(fn any) UseCaseRunnerFn {
 	return Must(Adapt(fn))
 }
 
 func ensureSignatureIsValid(useCaseRunnerType reflect.Type) error {
+	if useCaseRunnerType == nil {
+		return fmt.Errorf("%w: nil given", ErrUseCaseRunnerIsNotAFunction)
+	}
+
 	if useCaseRunnerType.Kind() != reflect.Func {
 		return fmt.Errorf("%w: %s", ErrUseCaseRunnerIsNotAFunction, useCaseRunnerType.String())
 	}
@@ -98,18 +96,69 @@ func ensureSignatureIsValid(useCaseRunnerType reflect.Type) error {
 		return fmt.Errorf("%w", err)
 	}
 
-	return nil
-}
-
-func ensureResultHasValidType(runnerType reflect.Type, res any) error {
-	want := runnerType.In(2)
-	got := reflect.TypeOf(res)
-
-	if got != want {
-		return fmt.Errorf("%w: want %v, got %v", ErrResultTypeMismatch, want, got)
+	if !returnsSingleError(useCaseRunnerType) {
+		return fmt.Errorf("%w: %s given", ErrInvalidReturnType, useCaseRunnerType.String())
 	}
 
 	return nil
+}
+
+func returnsSingleError(useCaseRunnerType reflect.Type) bool {
+	return useCaseRunnerType.NumOut() == 1 && useCaseRunnerType.Out(0) == reflect.TypeFor[error]()
+}
+
+// newRunner validates the signature once and captures everything the call needs, so the
+// returned runner only checks the argument types and calls the function.
+func newRunner(fnValue reflect.Value) (UseCaseRunnerFn, error) {
+	var fnType reflect.Type
+	if fnValue.IsValid() {
+		fnType = fnValue.Type()
+	}
+
+	if err := ensureSignatureIsValid(fnType); err != nil {
+		return nil, err
+	}
+
+	if fnValue.IsNil() {
+		return nil, fmt.Errorf("%w: nil %s given", ErrUseCaseRunnerIsNotAFunction, fnType)
+	}
+
+	reqType, respType := fnType.In(1), fnType.In(2)
+
+	return func(ctx context.Context, req Request, resp Response) error {
+		if ctx == nil {
+			return ErrNilContext
+		}
+
+		if err := ensureArgHasType(reqType, req, ErrRequestTypeMismatch); err != nil {
+			return err
+		}
+
+		if err := ensureArgHasType(respType, resp, ErrResultTypeMismatch); err != nil {
+			return err
+		}
+
+		// The parameter is context.Context itself, so a Value of that type lets Call skip its
+		// per-call interface conversion check.
+		in := [3]reflect.Value{reflect.ValueOf(&ctx).Elem(), reflect.ValueOf(req), reflect.ValueOf(resp)}
+		if err, ok := reflect.TypeAssert[error](fnValue.Call(in[:])[0]); ok && err != nil {
+			return err
+		}
+
+		return nil
+	}, nil
+}
+
+func ensureArgHasType(want reflect.Type, arg any, errMismatch error) error {
+	if got := reflect.TypeOf(arg); got != want {
+		return fmt.Errorf("%w: want %v, got %v", errMismatch, want, got)
+	}
+
+	return nil
+}
+
+func isNilPointer(v reflect.Value) bool {
+	return v.Kind() == reflect.Pointer && v.IsNil()
 }
 
 func ensureParamsHaveValidTypes(useCaseRunnerType reflect.Type) error {
@@ -128,11 +177,10 @@ func ensureParamsHaveValidTypes(useCaseRunnerType reflect.Type) error {
 	return nil
 }
 
+// firstArgIsContext requires context.Context itself: callers pass a context.Context, which
+// cannot be assigned to a concrete type or to a wider interface even if those implement it.
 func firstArgIsContext(useCaseRunnerType reflect.Type) bool {
-	ctxtInterface := reflect.TypeFor[context.Context]()
-	ctx := useCaseRunnerType.In(0)
-
-	return ctx.Implements(ctxtInterface)
+	return useCaseRunnerType.In(0) == reflect.TypeFor[context.Context]()
 }
 
 func secondArgIsRequest(useCaseRunnerType reflect.Type) bool {
@@ -151,25 +199,4 @@ func thirdArgIsResponse(useCaseRunnerType reflect.Type) bool {
 	thirdArg := useCaseRunnerType.In(2)
 
 	return thirdArg.Kind() == reflect.Pointer && thirdArg.Implements(responseInterface)
-}
-
-func invokeUseCaseRunner(useCaseRunner any, args ...any) error {
-	result := invoke(useCaseRunner, args...)
-
-	if err, ok := reflect.TypeAssert[error](result[0]); ok && err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func invoke(fn any, args ...any) []reflect.Value {
-	v := reflect.ValueOf(fn)
-
-	in := make([]reflect.Value, len(args))
-	for i, arg := range args {
-		in[i] = reflect.ValueOf(arg)
-	}
-
-	return v.Call(in)
 }

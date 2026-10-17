@@ -2,7 +2,7 @@ package interactor_test
 
 import (
 	"context"
-	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -53,7 +53,7 @@ func TestDispatcher(t *testing.T) {
 
 		// assert
 		require.NoError(t, err)
-		assert.Equal(t, res.result, 123)
+		assert.Equal(t, 123, res.result)
 	})
 }
 
@@ -75,5 +75,64 @@ func BenchmarkDispatcher(b *testing.B) {
 func assertUseCaseRunnerNotFound(t *testing.T, err error) {
 	t.Helper()
 
-	assert.True(t, errors.Is(err, interactor.ErrUseCaseRunnerNotFound))
+	assert.ErrorIs(t, err, interactor.ErrUseCaseRunnerNotFound)
+}
+
+func TestDispatcherIsSafeForConcurrentUse(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := interactor.NewDispatcher()
+	runner := interactor.MustAdapt(ConcreteUseCase{})
+
+	var wg sync.WaitGroup
+
+	for range 10 {
+		wg.Go(func() {
+			dispatcher.Register(TestRequest{}, runner)
+		})
+		wg.Go(func() {
+			var res TestResponse
+
+			_ = dispatcher.Run(context.Background(), TestRequest{id: 1}, &res)
+		})
+	}
+
+	wg.Wait()
+}
+
+func TestDispatcherZeroValueIsUsable(t *testing.T) {
+	t.Parallel()
+
+	var dispatcher interactor.Dispatcher
+
+	dispatcher.Register(TestRequest{}, interactor.MustAdapt(ConcreteUseCase{}))
+
+	var res TestResponse
+
+	err := dispatcher.Run(context.Background(), TestRequest{id: 7}, &res)
+
+	require.NoError(t, err)
+	assert.Equal(t, 7, res.result)
+}
+
+func TestDispatcherTreatsNilRunnerAsNotRegistered(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := interactor.NewDispatcher()
+	dispatcher.Register(TestRequest{}, nil)
+
+	err := dispatcher.Run(context.Background(), TestRequest{}, &TestResponse{})
+
+	require.ErrorIs(t, err, interactor.ErrUseCaseRunnerNotFound)
+}
+
+func TestDispatcherNamesNilRequestInError(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := interactor.NewDispatcher()
+
+	err := dispatcher.Run(context.Background(), nil, &TestResponse{})
+
+	require.ErrorIs(t, err, interactor.ErrUseCaseRunnerNotFound)
+	assert.NotContains(t, err.Error(), "%!", "error message has a fmt verb mismatch")
 }

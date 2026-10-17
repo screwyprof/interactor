@@ -16,7 +16,7 @@ The library is designed to be well-documented, thoroughly tested, and easy to us
 To install the Interactor Library, run the following command:
 
 ```bash
-go get -u github.com/screwyprof/interactor/v2
+go get github.com/screwyprof/interactor/v2@latest
 ```
 
 ## Usage
@@ -46,8 +46,6 @@ type UseCase struct {
 }
 
 // Run runs the use case with the given request.
-//
-// The response is returned by reference to avoid extra allocations.
 func (uc UseCase) Run(ctx context.Context, req TestRequest, res *TestResponse) error {
 	res.Result = uc.Res
 	return nil
@@ -59,7 +57,7 @@ func main() {
 
 	// Create a new dispatcher and register the use case runner.
 	dispatcher := interactor.NewDispatcher()
-	dispatcher.Register(TestRequest{}, interactor.MustAdapt(useCaseRunner.Run))
+	dispatcher.Register(TestRequest{}, interactor.MustAdapt(useCaseRunner))
 
 	// Run the use case
 	var res TestResponse

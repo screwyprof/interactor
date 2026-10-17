@@ -1,3 +1,4 @@
+// Package testdsl provides a Given/When/Then DSL for testing use case runners.
 package testdsl
 
 import (
@@ -5,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/screwyprof/interactor/v2"
 )
@@ -29,7 +31,7 @@ type InteractorTester func(given GivenFn, when WhenFn, then ThenFn)
 // Example:
 //
 //	want := &TestResponse{result: 123}
-//	useCaseRunner := &ConcreteUseCase{res: want.result}
+//	useCaseRunner := &ConcreteUseCase{}
 //	adaptedUseCaseRunner := interactor.Must(interactor.Func(useCaseRunner.Run))
 //
 //	Test(t)(
@@ -68,7 +70,7 @@ func Then(want interactor.Response) ThenFn {
 		return func(got interactor.Response, err error) {
 			tb.Helper()
 
-			assert.NoError(tb, err)
+			require.NoError(tb, err)
 			assert.Equal(tb, want, got)
 		}
 	}

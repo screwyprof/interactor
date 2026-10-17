@@ -20,6 +20,68 @@ func TestFunc(t *testing.T) {
 			wantErr: interactor.ErrUseCaseRunnerIsNotAFunction,
 		},
 		{
+			name:    "a use case runner must not be nil",
+			runner:  nil,
+			wantErr: interactor.ErrUseCaseRunnerIsNotAFunction,
+		},
+		{
+			name:    "a use case runner must not be a nil function",
+			runner:  (func(context.Context, TestRequest, *TestResponse) error)(nil),
+			wantErr: interactor.ErrUseCaseRunnerIsNotAFunction,
+		},
+		{
+			name: "first input param must be context.Context, not a type implementing it",
+			runner: func(_ *customContext, _ TestRequest, _ *TestResponse) error {
+				return nil
+			},
+			wantErr: interactor.ErrFirstArgHasInvalidType,
+		},
+		{
+			name: "first input param must be context.Context, not a wider interface",
+			runner: func(_ extendedContext, _ TestRequest, _ *TestResponse) error {
+				return nil
+			},
+			wantErr: interactor.ErrFirstArgHasInvalidType,
+		},
+		{
+			name:    "a use case runner must return an error",
+			runner:  func(_ context.Context, _ TestRequest, _ *TestResponse) {},
+			wantErr: interactor.ErrInvalidReturnType,
+		},
+		{
+			name:    "a use case runner must not return a non-error value",
+			runner:  func(_ context.Context, _ TestRequest, _ *TestResponse) int { return 0 },
+			wantErr: interactor.ErrInvalidReturnType,
+		},
+		{
+			name: "a use case runner must return only an error",
+			runner: func(_ context.Context, _ TestRequest, _ *TestResponse) (int, error) {
+				return 0, nil
+			},
+			wantErr: interactor.ErrInvalidReturnType,
+		},
+		{
+			name:          "request must have the runner's request type",
+			runner:        ConcreteUseCase{}.Run,
+			request:       "oops",
+			response:      &TestResponse{},
+			wantRunnerErr: interactor.ErrRequestTypeMismatch,
+		},
+		{
+			name:          "request must not be a pointer when the runner takes a value",
+			runner:        ConcreteUseCase{}.Run,
+			request:       &TestRequest{},
+			response:      &TestResponse{},
+			wantRunnerErr: interactor.ErrRequestTypeMismatch,
+		},
+		{
+			name:          "request must not be nil",
+			runner:        ConcreteUseCase{}.Run,
+			request:       nil,
+			response:      &TestResponse{},
+			wantRunnerErr: interactor.ErrRequestTypeMismatch,
+		},
+		{
 			name: "a use case runner must have 3 arguments",
 			runner: func(_ context.Context, _ TestRequest) error {
 				return nil
@@ -107,6 +169,16 @@ func TestAdapt(t *testing.T) {
 			wantErr: interactor.ErrUseCaseRunnerHasNoRunMethod,
 		},
 		{
+			name:    "a use case must not be nil",
+			runner:  nil,
+			wantErr: interactor.ErrUseCaseRunnerHasNoRunMethod,
+		},
+		{
+			name:    "a use case must not be a nil pointer",
+			runner:  (*ConcreteUseCase)(nil),
+			wantErr: interactor.ErrUseCaseRunnerHasNoRunMethod,
+		},
+		{
 			name:    "method must have 3 arguments",
 			runner:  InvalidUseCaseWrongSignature{},
 			wantErr: interactor.ErrInvalidUseCaseRunnerSignature,
@@ -129,6 +201,7 @@ func TestAdapt(t *testing.T) {
 		{
 			name:          "response types must match",
 			runner:        ConcreteUseCase{},
+			request:       TestRequest{},
 			response:      &AnotherResponse{},
 			wantRunnerErr: interactor.ErrResultTypeMismatch,
 		},
@@ -161,6 +234,16 @@ func TestAdapt(t *testing.T) {
 			runAdaptTest(t, tc)
 		})
 	}
+}
+
+func TestFuncRejectsNilContext(t *testing.T) {
+	t.Parallel()
+
+	runner := interactor.Must(interactor.Func(ConcreteUseCase{}.Run))
+
+	err := runner(nil, TestRequest{id: 7}, &TestResponse{})
+
+	require.ErrorIs(t, err, interactor.ErrNilContext)
 }
 
 func TestMust(t *testing.T) {
