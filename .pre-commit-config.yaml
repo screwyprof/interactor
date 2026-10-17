@@ -1,4 +1,4 @@
-# Hooks shell out to the Makefile, so the golangci-lint version is pinned in one place.
+# Hooks shell out to the Makefile, so every tool version is pinned in one place.
 repos:
   - repo: local
     hooks:
@@ -23,9 +23,9 @@ repos:
         types: [go]
         pass_filenames: false
 
-      - id: go-unit-tests
-        name: go test
-        entry: go test ./...
+      - id: go-mod-tidy
+        name: go mod tidy
+        entry: go mod tidy
         language: system
-        types: [go]
+        files: (^go\.mod$|^go\.sum$|\.go$)
         pass_filenames: false

@@ -5,7 +5,7 @@ import (
 	"errors"
 )
 
-var errSomeErr = errors.New("some error")
+var errSome = errors.New("some error")
 
 type TestRequest struct {
 	id int

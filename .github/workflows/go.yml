@@ -1,5 +1,7 @@
 name: Go
 
+# Pull requests cover branches; push covers main. Listing both unscoped would build every commit on
+# a branch with an open pull request twice.
 on:
   push:
     branches: [main]
@@ -9,6 +11,7 @@ permissions:
   contents: read
 
 jobs:
+  # One job running one command, so CI and a contributor's machine run the same gates.
   check:
     runs-on: ubuntu-latest
     permissions:
@@ -21,33 +24,51 @@ jobs:
         with:
           # .golangci.yml diffs against origin/main, which needs real history.
           fetch-depth: 0
+          # Nothing here pushes, and `make check` runs bumped dependency code.
           persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
-          # `.x`, not go-version-file: setup-go would read go.mod's version as an exact patch and stay on it.
+          # `.x`, not go-version-file: setup-go would read go.mod's version as an exact patch and
+          # stay on it, missing standard library security fixes govulncheck then reports.
           go-version: '1.26.x'
           cache: true
           cache-dependency-path: go.sum
 
-      # Annotations on the diff. Never a gate, `make lint-all` below is. Skipped for forks, whose
-      # token is read-only.
+      # Annotations on the diff, which a log cannot give. Never a gate, `make check` below is.
+      # Skipped where it cannot work or should not run: a fork's token is read-only, and a Renovate
+      # pull request would hand a freshly bumped tool the token in this step's env.
       - name: Lint annotations
         if: >-
           github.event_name == 'pull_request'
           && github.event.pull_request.head.repo.full_name == github.repository
+          && github.event.pull_request.user.login != 'renovate[bot]'
         continue-on-error: true
         run: make lint-annotate
         env:
           REVIEWDOG_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Lint
-        run: make lint-all
+      # `shell: bash` means `bash -eo pipefail`; the default has no pipefail, so the step would
+      # exit with tee's status and never fail.
+      - name: make check
+        shell: bash
+        run: make check | tee check.out
 
-      - name: Run tests
-        run: make test
+      # Guarded cat: under always() this also runs when an earlier step failed before check.out
+      # was written.
+      - name: Publish the gate block
+        if: always()
+        run: |
+          {
+            echo '### Gates'
+            echo '```'
+            cat check.out 2>/dev/null || echo '(make check did not run)'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
+      # Uploads whenever a profile exists, so a gate failing after the tests still reports to the
+      # codecov checks instead of leaving them pending.
       - name: Upload coverage to Codecov
         if: '!cancelled() && hashFiles(''coverage.out'') != '''''
         uses: codecov/codecov-action@v7
@@ -56,3 +77,20 @@ jobs:
           files: ./coverage.out
           disable_search: true
           fail_ci_if_error: true
+
+  # go.mod sets the minimum Go version; this proves the library also builds and passes on the
+  # newest release its users may be on. `check` above stays on 1.26 so its gates are reproducible.
+  test-stable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: true
+          cache-dependency-path: go.sum
+
+      - run: make test

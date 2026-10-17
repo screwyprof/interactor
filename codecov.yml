@@ -1,0 +1,11 @@
+# The project target is a fixed 100% rather than a comparison against the base commit: the library
+# is fully covered, so any drop is a regression. The same floor is COVERAGE_FLOOR in the Makefile,
+# which `make check` asserts before a pull request is opened.
+coverage:
+  status:
+    project:
+      default:
+        target: 100%
+    patch:
+      default:
+        target: 100%

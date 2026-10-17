@@ -9,37 +9,41 @@ linters:
     - asasalint
     - asciicheck
     - bidichk
-    - bodyclose
     - containedctx
     - contextcheck
     - copyloopvar
     - cyclop
     - dogsled
     - dupl
+    - dupword
     - durationcheck
+    - embeddedstructfieldcheck
     - err113
     - errcheck
     - errchkjson
+    - errname
     - errorlint
     - exhaustive
+    - exptostd
     - forcetypeassert
     - funlen
+    - gocheckcompilerdirectives
     - gochecknoglobals
     - gochecknoinits
     - gocognit
     - goconst
     - gocritic
     - gocyclo
+    - godoclint
     - godot
-    - goheader
     - gomoddirectives
     - goprintffuncname
     - gosec
     - govet
-    - grouper
-    - importas
+    - iface
     - ineffassign
     - interfacebloat
+    - intrange
     - lll
     - maintidx
     - makezero
@@ -48,20 +52,20 @@ linters:
     - nakedret
     - nestif
     - nilerr
+    - nilnesserr
+    - nilnil
     - nlreturn
-    - noctx
     - nolintlint
     - nonamedreturns
-    - nosprintfhostport
     - paralleltest
+    - perfsprint
     - prealloc
     - predeclared
-    - promlinter
     - reassign
+    - recvcheck
     - revive
-    - rowserrcheck
-    - sqlclosecheck
     - staticcheck
+    - testableexamples
     - testifylint
     - testpackage
     - thelper
@@ -76,6 +80,14 @@ linters:
     - wrapcheck
     - wsl_v5
   settings:
+    # require-doc covers what revive's `exported` rule would, which the `comments` exclusion preset
+    # turns off: nothing else checks that an exported symbol has a doc comment.
+    godoclint:
+      enable:
+        - require-doc
+        - require-pkg-doc
+        - require-stdlib-doclink
+        - no-unused-link
     goconst:
       min-len: 2
       min-occurrences: 2
@@ -89,11 +101,6 @@ linters:
       tab-width: 4
     nolintlint:
       allow-unused: false
-    wrapcheck:
-      # Substrings of signatures to ignore; overrides wrapcheck's default set.
-      # See https://github.com/tomarrell/wrapcheck#configuration
-      ignore-sigs:
-        - fmt.Errorf(
   exclusions:
     generated: lax
     presets:
@@ -109,6 +116,7 @@ linters:
           - err113
           - funlen
           - goconst
+          - godoclint
           - gosec
         path: _test\.go
       - linters:
@@ -122,11 +130,15 @@ formatters:
   enable:
     - gofumpt
     - gci
+    - golines
   settings:
     gci:
       sections:
         - standard
         - default
         - prefix(github.com/screwyprof)
+    golines:
+      max-len: 120
+      tab-len: 4
   exclusions:
     generated: lax
