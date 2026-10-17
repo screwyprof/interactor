@@ -24,22 +24,7 @@ import (
 //
 //	func(ctx context.Context, req TestRequest, res *TestResponse) error
 func Func(fn any) (UseCaseRunnerFn, error) {
-	useCaseRunnerType := reflect.TypeOf(fn)
-	if err := ensureSignatureIsValid(useCaseRunnerType); err != nil {
-		return nil, err
-	}
-
-	return func(ctx context.Context, req Request, resp Response) error {
-		if err := ensureRequestHasValidType(useCaseRunnerType, req); err != nil {
-			return err
-		}
-
-		if err := ensureResultHasValidType(useCaseRunnerType, resp); err != nil {
-			return err
-		}
-
-		return invokeUseCaseRunner(fn, ctx, req, resp)
-	}, nil
+	return newRunner(reflect.ValueOf(fn))
 }
 
 // Must is a wrapper around Func which panics if an error occurs.
@@ -80,7 +65,7 @@ func Adapt(runner any) (UseCaseRunnerFn, error) {
 		return nil, fmt.Errorf("%w", ErrUseCaseRunnerHasNoRunMethod)
 	}
 
-	return Func(fnValue.Interface())
+	return newRunner(fnValue)
 }
 
 // MustAdapt is a wrapper around Adapt which panics if an error occurs.
@@ -121,26 +106,54 @@ func returnsSingleError(useCaseRunnerType reflect.Type) bool {
 	return useCaseRunnerType.NumOut() == 1 && useCaseRunnerType.Out(0) == reflect.TypeFor[error]()
 }
 
-func ensureRequestHasValidType(runnerType reflect.Type, req any) error {
-	want := runnerType.In(1)
-	got := reflect.TypeOf(req)
+// newRunner validates the signature once and captures everything the call needs, so the
+// returned runner only checks the argument types and calls the function.
+func newRunner(fnValue reflect.Value) (UseCaseRunnerFn, error) {
+	var fnType reflect.Type
+	if fnValue.IsValid() {
+		fnType = fnValue.Type()
+	}
 
-	if got != want {
-		return fmt.Errorf("%w: want %v, got %v", ErrRequestTypeMismatch, want, got)
+	if err := ensureSignatureIsValid(fnType); err != nil {
+		return nil, err
+	}
+
+	ctxType, reqType, respType := fnType.In(0), fnType.In(1), fnType.In(2)
+
+	return func(ctx context.Context, req Request, resp Response) error {
+		if err := ensureArgHasType(reqType, req, ErrRequestTypeMismatch); err != nil {
+			return err
+		}
+
+		if err := ensureArgHasType(respType, resp, ErrResultTypeMismatch); err != nil {
+			return err
+		}
+
+		in := [3]reflect.Value{contextValue(ctx, ctxType), reflect.ValueOf(req), reflect.ValueOf(resp)}
+		if err, ok := reflect.TypeAssert[error](fnValue.Call(in[:])[0]); ok && err != nil {
+			return err
+		}
+
+		return nil
+	}, nil
+}
+
+func ensureArgHasType(want reflect.Type, arg any, errMismatch error) error {
+	if got := reflect.TypeOf(arg); got != want {
+		return fmt.Errorf("%w: want %v, got %v", errMismatch, want, got)
 	}
 
 	return nil
 }
 
-func ensureResultHasValidType(runnerType reflect.Type, res any) error {
-	want := runnerType.In(2)
-	got := reflect.TypeOf(res)
-
-	if got != want {
-		return fmt.Errorf("%w: want %v, got %v", ErrResultTypeMismatch, want, got)
+// contextValue passes a nil context as the zero value of the parameter's type:
+// reflect.ValueOf(nil) is the zero Value, which Call rejects.
+func contextValue(ctx context.Context, ctxType reflect.Type) reflect.Value {
+	if ctx == nil {
+		return reflect.Zero(ctxType)
 	}
 
-	return nil
+	return reflect.ValueOf(ctx)
 }
 
 func ensureParamsHaveValidTypes(useCaseRunnerType reflect.Type) error {
@@ -182,33 +195,4 @@ func thirdArgIsResponse(useCaseRunnerType reflect.Type) bool {
 	thirdArg := useCaseRunnerType.In(2)
 
 	return thirdArg.Kind() == reflect.Pointer && thirdArg.Implements(responseInterface)
-}
-
-func invokeUseCaseRunner(useCaseRunner any, args ...any) error {
-	result := invoke(useCaseRunner, args...)
-
-	if err, ok := reflect.TypeAssert[error](result[0]); ok && err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func invoke(fn any, args ...any) []reflect.Value {
-	v := reflect.ValueOf(fn)
-
-	in := make([]reflect.Value, len(args))
-	for i, arg := range args {
-		// reflect.ValueOf(nil) is the zero Value, which Call rejects; a nil argument such as
-		// a nil context has to be passed as the zero value of the parameter's type instead.
-		if arg == nil {
-			in[i] = reflect.Zero(v.Type().In(i))
-
-			continue
-		}
-
-		in[i] = reflect.ValueOf(arg)
-	}
-
-	return v.Call(in)
 }
