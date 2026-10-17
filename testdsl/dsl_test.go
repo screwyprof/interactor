@@ -205,3 +205,25 @@ func TestWhenRunsTheUseCaseUnderTheGivenContext(t *testing.T) {
 		})
 	}
 }
+
+func TestThenCheckGetsTheUseCasesError(t *testing.T) {
+	t.Parallel()
+
+	var gotErr error
+
+	f := run(t, func(tb testing.TB) {
+		tb.Helper()
+
+		testdsl.Test(tb).
+			Given(Pinger{}).
+			When(t.Context(), Ping{Fail: true}).
+			ThenCheck(func(tb testing.TB, _ Pong, err error) {
+				tb.Helper()
+
+				gotErr = err
+			})
+	})
+
+	assert.False(t, f.Failed())
+	assert.Same(t, errBoom, gotErr)
+}

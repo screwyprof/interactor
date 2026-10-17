@@ -38,8 +38,11 @@ MAKE_COLOR=\033[33;01m%-20s\033[0m
 
 all: fmt check ## format code, then run every gate
 
+# $(shell) hides git's failure: outside a checkout GO_FILES is empty, and fmt would then format
+# every directory instead of the repository's files, so it stops instead.
 fmt: ## format go files
 	@echo -e "$(OK_COLOR)==> Formatting$(NO_COLOR)"
+	@test -n "$(GO_FILES)" || { echo "no Go files: this needs a git checkout"; exit 1; }
 	@$(GOLANGCI) fmt $(GO_FILES)
 
 lint: ## run linters for current changes
@@ -91,8 +94,8 @@ mutate: ## run mutation testing; fails unless every mutant is killed
 	 out=$$(cd "$$tmp" && go run github.com/go-gremlins/gremlins/cmd/gremlins@$(GREMLINS_VERSION) \
 		unleash --timeout-coefficient=30 . 2>&1) || { echo "$$out"; exit 1; }; \
 	 echo "$$out"; \
-	 echo "$$out" | grep -qE '^Killed: [1-9][0-9]*, Lived: 0, Not covered: 0$$' \
-		&& echo "$$out" | grep -qE '^Timed out: 0,' \
+	 grep -qE '^Killed: [1-9][0-9]*, Lived: 0, Not covered: 0$$' <<<"$$out" \
+		&& grep -qE '^Timed out: 0,' <<<"$$out" \
 		|| { echo "mutation testing: every mutant must be killed"; exit 1; }
 
 test: ## run all tests and write the coverage profile

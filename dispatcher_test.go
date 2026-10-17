@@ -50,7 +50,7 @@ func TestDispatch(t *testing.T) {
 
 		_, err := d.Dispatch[Answer](t.Context(), Question{})
 
-		require.ErrorIs(t, err, errBoom)
+		require.Same(t, errBoom, err, "the use case's error is returned unchanged, not wrapped")
 	})
 
 	t.Run("fails when nothing is registered for the request type", func(t *testing.T) {
@@ -112,7 +112,7 @@ func TestDispatch(t *testing.T) {
 
 		got, err := d.Dispatch[Answer](t.Context(), Question{})
 
-		require.ErrorIs(t, err, errBoom)
+		require.Same(t, errBoom, err, "the use case's error is returned unchanged, not wrapped")
 		assert.Equal(t, Answer{Value: 7}, got)
 	})
 
