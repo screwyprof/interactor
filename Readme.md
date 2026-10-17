@@ -96,21 +96,62 @@ Errors returned by the use case itself come back unchanged.
 
 ## Testing your use cases
 
-The `testdsl` package reads tests as Given/When/Then:
+Use cases are plain types, so any testing style works. The `testdsl` package is there if you want each test to read as a scenario: given this use case, when it runs with this request, then expect this.
 
 ```go
 import "github.com/screwyprof/interactor/v3/testdsl"
 
 func TestGreet(t *testing.T) {
 	testdsl.Test(t,
-		Greet{},                                                // given this use case
-		Hello{Name: "Gopher"},                                  // when it runs with this request
+		Greet{},                                               // given this use case
+		Hello{Name: "Gopher"},                                 // when it runs with this request
 		testdsl.ThenReturns(Greeting{Text: "Hello, Gopher!"}), // then it returns this
 	)
 }
 ```
 
-`testdsl.ThenFails[Greeting](err)` checks the error instead. `testdsl` uses [testify](https://github.com/stretchr/testify).
+Expect an error with `ThenFails`, which matches like `errors.Is`. Name the response type, since nothing else in the call mentions it:
+
+```go
+func TestGreetRejectsAnEmptyName(t *testing.T) {
+	testdsl.Test(t, Greet{}, Hello{}, testdsl.ThenFails[Greeting](ErrNoName))
+}
+```
+
+For anything else, write your own `Then`; it is a plain `func(tb testing.TB, got Res, err error)`:
+
+```go
+func ThenMentions(name string) testdsl.Then[Greeting] {
+	return func(tb testing.TB, got Greeting, err error) {
+		tb.Helper()
+
+		require.NoError(tb, err)
+		assert.Contains(tb, got.Text, name)
+	}
+}
+```
+
+Scenarios fit table-driven tests too:
+
+```go
+func TestGreetScenarios(t *testing.T) {
+	tests := map[string]struct {
+		when Hello
+		then testdsl.Then[Greeting]
+	}{
+		"greets by name":      {Hello{Name: "Gopher"}, ThenMentions("Gopher")},
+		"rejects empty names": {Hello{}, testdsl.ThenFails[Greeting](ErrNoName)},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			testdsl.Test(t, Greet{}, tc.when, tc.then)
+		})
+	}
+}
+```
+
+`testdsl` uses [testify](https://github.com/stretchr/testify), so your tests depend on it too.
 
 ## Migrating from v2
 
