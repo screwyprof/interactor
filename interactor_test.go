@@ -1,42 +1,17 @@
 package interactor_test
 
 import (
-	"context"
-	"errors"
 	"testing"
 
-	"github.com/screwyprof/interactor/v2"
-	. "github.com/screwyprof/interactor/v2/testdsl" //nolint:revive // the DSL reads as Given/When/Then.
+	"github.com/screwyprof/interactor/v3"
+	"github.com/screwyprof/interactor/v3/testdsl"
 )
 
-func TestInteractorAcceptance(t *testing.T) {
+func TestUseCaseFunc(t *testing.T) {
 	t.Parallel()
 
-	t.Run("ensure use case returns an error", func(t *testing.T) {
-		t.Parallel()
-
-		want := errors.New("some error")
-		useCaseRunner := &ConcreteUseCase{err: want}
-		adaptedUseCaseRunner := interactor.MustAdapt(useCaseRunner)
-
-		Test(t)(
-			Given(adaptedUseCaseRunner.Run),
-			When(context.Background(), TestRequest{}, &TestResponse{}),
-			ThenFailWith(want),
-		)
-	})
-
-	t.Run("ensure use case returns valid result", func(t *testing.T) {
-		t.Parallel()
-
-		want := &TestResponse{result: 123}
-		useCaseRunner := &ConcreteUseCase{}
-		adaptedUseCaseRunner := interactor.Must(interactor.Func(useCaseRunner.Run))
-
-		Test(t)(
-			Given(adaptedUseCaseRunner.Run),
-			When(context.Background(), TestRequest{123}, &TestResponse{}),
-			Then(want),
-		)
-	})
+	testdsl.Test(t).
+		Given(interactor.UseCaseFunc[Question, Answer](AnswerQuestion{}.Run)).
+		When(t.Context(), Question{ID: 21}).
+		Then(Answer{Value: 42})
 }

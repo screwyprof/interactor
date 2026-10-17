@@ -1,4 +1,20 @@
-// Package testdsl provides a Given/When/Then DSL for testing use case runners.
+// Package testdsl is a Given/When/Then DSL for testing your own use cases.
+//
+// Import it from your tests when you want each test to read as a scenario:
+//
+//	func TestGreet(t *testing.T) {
+//		testdsl.Test(t).
+//			Given(Greet{}).
+//			When(t.Context(), Hello{Name: "Gopher"}).
+//			Then(Greeting{Text: "Hello, Gopher!"})
+//	}
+//
+// Given fixes the request and response types for the rest of the chain, so When only accepts the
+// use case's request and Then only its response: a mismatched expectation does not compile.
+// [When.ThenFailWith] expects an error instead, and [When.ThenCheck] runs a check of your own.
+//
+// Like any assertion library, testdsl checks only what a scenario asks for: end each one with a
+// Then method. It uses testify, which your tests then depend on too.
 package testdsl
 
 import (
@@ -8,83 +24,68 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/screwyprof/interactor/v2"
+	"github.com/screwyprof/interactor/v3"
 )
 
-// GivenFn is a test init function.
-type GivenFn func() interactor.UseCaseRunner
+// Scenario starts a test. Create one with [Test].
+type Scenario struct {
+	tb testing.TB
+}
 
-// WhenFn is a use case runner function.
-type WhenFn func(useCaseRunner interactor.UseCaseRunner) (interactor.Response, error)
-
-// ThenFn prepares the Checker.
-type ThenFn func(t testing.TB) Checker
-
-// Checker asserts the given results.
-type Checker func(resp interactor.Response, err error)
-
-// InteractorTester defines a Test Suite.
-type InteractorTester func(given GivenFn, when WhenFn, then ThenFn)
-
-// Test runs the test.
-//
-// Example:
-//
-//	want := &TestResponse{result: 123}
-//	useCaseRunner := &ConcreteUseCase{}
-//	adaptedUseCaseRunner := interactor.Must(interactor.Func(useCaseRunner.Run))
-//
-//	Test(t)(
-//		Given(adaptedUseCaseRunner.Run),
-//		When(context.Background(), TestRequest{123}, &TestResponse{}),
-//		Then(want))
-func Test(tb testing.TB) InteractorTester {
+// Test starts a scenario reported to tb.
+func Test(tb testing.TB) *Scenario {
 	tb.Helper()
 
-	return func(given GivenFn, when WhenFn, then ThenFn) {
-		tb.Helper()
-
-		then(tb)(when(given()))
-	}
+	return &Scenario{tb: tb}
 }
 
-// Given prepares the given use case runner for testing.
-func Given(useCaseRunner interactor.UseCaseRunnerFn) GivenFn {
-	return func() interactor.UseCaseRunner {
-		return useCaseRunner
-	}
+// Given is a scenario with the use case under test.
+type Given[Req, Res any] struct {
+	tb      testing.TB
+	useCase interactor.UseCase[Req, Res]
 }
 
-// When runs the use case.
-func When(ctx context.Context, req interactor.Request, res interactor.Response) WhenFn {
-	return func(useCaseRunner interactor.UseCaseRunner) (interactor.Response, error) {
-		return res, useCaseRunner.Run(ctx, req, res)
-	}
+// Given sets the use case under test.
+func (s *Scenario) Given[Req, Res any](useCase interactor.UseCase[Req, Res]) *Given[Req, Res] {
+	return &Given[Req, Res]{tb: s.tb, useCase: useCase}
 }
 
-// Then asserts that the expected response is returned.
-func Then(want interactor.Response) ThenFn {
-	return func(tb testing.TB) Checker {
-		tb.Helper()
-
-		return func(got interactor.Response, err error) {
-			tb.Helper()
-
-			require.NoError(tb, err)
-			assert.Equal(tb, want, got)
-		}
-	}
+// When is a scenario whose use case has run, holding what it returned.
+type When[Res any] struct {
+	tb  testing.TB
+	got Res
+	err error
 }
 
-// ThenFailWith asserts that the expected error occurred.
-func ThenFailWith(want error) ThenFn {
-	return func(tb testing.TB) Checker {
-		tb.Helper()
+// When runs the use case with ctx and req. Call the Then methods from the test's goroutine, as
+// for any test that can fail.
+func (g *Given[Req, Res]) When(ctx context.Context, req Req) *When[Res] {
+	got, err := g.useCase.Run(ctx, req)
 
-		return func(_ interactor.Response, err error) {
-			tb.Helper()
+	return &When[Res]{tb: g.tb, got: got, err: err}
+}
 
-			assert.ErrorIs(tb, err, want)
-		}
-	}
+// Then expects the use case to have succeeded and returned want.
+func (w *When[Res]) Then(want Res) {
+	w.tb.Helper()
+
+	require.NoError(w.tb, w.err)
+	assert.Equal(w.tb, want, w.got)
+}
+
+// ThenFailWith expects the use case to have failed with an error matching want, as by [errors.Is].
+// A nil want never passes: the use case must have failed.
+func (w *When[Res]) ThenFailWith(want error) {
+	w.tb.Helper()
+
+	require.Error(w.tb, w.err)
+	require.ErrorIs(w.tb, w.err, want)
+}
+
+// ThenCheck runs check on what the use case returned, for expectations Then and ThenFailWith do
+// not cover.
+func (w *When[Res]) ThenCheck(check func(tb testing.TB, got Res, err error)) {
+	w.tb.Helper()
+
+	check(w.tb, w.got, w.err)
 }

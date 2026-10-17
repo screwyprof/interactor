@@ -119,9 +119,6 @@ linters:
           - godoclint
           - gosec
         path: _test\.go
-      - linters:
-          - wrapcheck
-        path: testdsl/
 issues:
   # Only what this branch added, measured against where it left main. origin/main, not main: a CI
   # checkout has no local branch of that name, only remote-tracking refs. `make lint-all` clears it.

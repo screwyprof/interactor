@@ -1,37 +1,35 @@
-// Package interactor provides a flexible library for running use cases.
+// Package interactor runs use cases and dispatches requests to them by request type.
 //
-// This package allows registering use cases for different request types,
-// efficiently dispatching requests to the appropriate handlers.
+// A use case is any type with a Run method taking a request and returning a response:
 //
-// Register a use case for its request type, then run requests through the dispatcher:
+//	type Greet struct{}
 //
-//	dispatcher := interactor.NewDispatcher()
-//	dispatcher.Register(MyRequest{}, interactor.MustAdapt(&MyUseCase{}))
+//	func (Greet) Run(ctx context.Context, req Hello) (Greeting, error) { ... }
 //
-//	var res MyResponse
-//	err := dispatcher.Run(ctx, MyRequest{}, &res)
+// Register it on a [Dispatcher], then dispatch requests of that type:
 //
-// See the examples for complete, runnable code.
+//	var d interactor.Dispatcher
+//	d.MustRegister(Greet{}) // or Register, to handle the error
+//
+//	greeting, err := d.Dispatch[Greeting](ctx, Hello{Name: "Gopher"})
+//
+// Types are checked by the compiler; only the wiring (a request type nobody registered, or a
+// response type other than the registered one) is checked when dispatching.
 package interactor
 
 import "context"
 
-// Request is an interface representing the input for the use case.
-type Request any
-
-// Response is an interface representing the output from the use case.
-type Response any
-
-// UseCaseRunner is an interface that defines a contract for running a use case.
-type UseCaseRunner interface {
-	// Run executes the given request and writes the result to the provided response.
-	Run(ctx context.Context, req Request, resp Response) error
+// UseCase handles one request type and returns its response.
+type UseCase[Req, Res any] interface {
+	Run(ctx context.Context, req Req) (Res, error)
 }
 
-// UseCaseRunnerFn allows using pure functions as a UseCaseRunner.
-type UseCaseRunnerFn func(ctx context.Context, req Request, resp Response) error
+// UseCaseFunc lets a plain function be a [UseCase], like [net/http.HandlerFunc].
+type UseCaseFunc[Req, Res any] func(ctx context.Context, req Req) (Res, error)
 
-// Run executes the given request and writes the result to the provided response.
-func (fn UseCaseRunnerFn) Run(ctx context.Context, req Request, resp Response) error {
-	return fn(ctx, req, resp)
+// Run calls f(ctx, req).
+func (f UseCaseFunc[Req, Res]) Run(ctx context.Context, req Req) (Res, error) {
+	return f(ctx, req)
 }
+
+var _ UseCase[struct{}, struct{}] = UseCaseFunc[struct{}, struct{}](nil)

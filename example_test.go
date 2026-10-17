@@ -2,71 +2,84 @@ package interactor_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"log"
 
-	"github.com/screwyprof/interactor/v2"
+	"github.com/screwyprof/interactor/v3"
 )
 
-func ExampleDispatcher() {
-	// arrange
-	useCaseRunner := &ConcreteUseCase{}
+type Hello struct{ Name string }
 
-	dispatcher := interactor.NewDispatcher()
-	dispatcher.Register(TestRequest{}, interactor.MustAdapt(useCaseRunner))
+type Greeting struct{ Text string }
 
-	// act
-	var res TestResponse
-	if err := dispatcher.Run(context.Background(), TestRequest{id: 42}, &res); err != nil {
-		log.Fatal(err)
+// Greet is a use case: a type with a Run method from a request to a response.
+type Greet struct{}
+
+func (Greet) Run(_ context.Context, req Hello) (Greeting, error) {
+	return Greeting{Text: "Hello, " + req.Name + "!"}, nil
+}
+
+func Example() {
+	var d interactor.Dispatcher
+
+	d.MustRegister(Greet{})
+
+	greeting, err := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
+	if err != nil {
+		fmt.Println(err)
+
+		return
 	}
 
-	fmt.Printf("The answer to life the universe and everything: %d\n", res.result)
+	fmt.Println(greeting.Text)
 
 	// Output:
-	// The answer to life the universe and everything: 42
+	// Hello, Gopher!
 }
 
-// The README usage example, compiled and run here. Types are prefixed to avoid clashing with
-// the test helpers and the parameter names are blanked for the linter; keep the rest in step
-// with the README.
+func ExampleDispatcher_Dispatch_notFound() {
+	var d interactor.Dispatcher
 
-// ReadmeRequest represents a test request.
-type ReadmeRequest struct{}
+	_, err := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
 
-// ReadmeResponse represents a test response.
-type ReadmeResponse struct {
-	Result int
+	fmt.Println(errors.Is(err, interactor.ErrUseCaseNotFound))
+
+	// Output:
+	// true
 }
 
-// ReadmeUseCase is an example use case implementation.
-type ReadmeUseCase struct {
-	Res int
-}
+func ExampleUseCaseFunc() {
+	shout := interactor.UseCaseFunc[Hello, Greeting](func(_ context.Context, req Hello) (Greeting, error) {
+		return Greeting{Text: "HELLO, " + req.Name + "!"}, nil
+	})
 
-// Run runs the use case with the given request.
-func (uc ReadmeUseCase) Run(_ context.Context, _ ReadmeRequest, res *ReadmeResponse) error {
-	res.Result = uc.Res
+	var d interactor.Dispatcher
 
-	return nil
-}
+	d.MustRegister(shout)
 
-func ExampleMustAdapt() {
-	// Create a use case.
-	useCaseRunner := &ReadmeUseCase{Res: 42}
+	greeting, err := d.Dispatch[Greeting](context.Background(), Hello{Name: "Gopher"})
+	if err != nil {
+		fmt.Println(err)
 
-	// Create a new dispatcher and register the use case runner.
-	dispatcher := interactor.NewDispatcher()
-	dispatcher.Register(ReadmeRequest{}, interactor.MustAdapt(useCaseRunner))
-
-	// Run the use case
-	var res ReadmeResponse
-	if err := dispatcher.Run(context.Background(), ReadmeRequest{}, &res); err != nil {
-		log.Fatal(err)
+		return
 	}
 
-	fmt.Printf("The answer to life, the universe, and everything: %d\n", res.Result)
+	fmt.Println(greeting.Text)
 
 	// Output:
-	// The answer to life, the universe, and everything: 42
+	// HELLO, Gopher!
+}
+
+func ExampleDispatcher_Register() {
+	var d interactor.Dispatcher
+
+	d.MustRegister(Greet{})
+
+	// Register returns the error instead, for wiring that is decided at runtime.
+	err := d.Register(Greet{})
+
+	fmt.Println(errors.Is(err, interactor.ErrAlreadyRegistered))
+
+	// Output:
+	// true
 }
