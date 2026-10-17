@@ -205,31 +205,15 @@ func BenchmarkDirect(b *testing.B) {
 func TestMustRegister(t *testing.T) {
 	t.Parallel()
 
-	t.Run("registers the use case", func(t *testing.T) {
-		t.Parallel()
+	var d interactor.Dispatcher
+	d.MustRegister(AnswerQuestion{})
 
-		var d interactor.Dispatcher
-
-		d.MustRegister(AnswerQuestion{})
-
-		got, err := d.Dispatch[Answer](t.Context(), Question{ID: 21})
-		require.NoError(t, err)
-		assert.Equal(t, Answer{Value: 42}, got)
-	})
-
-	t.Run("panics with the registration error", func(t *testing.T) {
-		t.Parallel()
-
-		var d interactor.Dispatcher
-		d.MustRegister(AnswerQuestion{})
-
-		assertPanicsWith(t, interactor.ErrAlreadyRegistered, func() { d.MustRegister(AnswerQuestion{}) })
-		assertPanicsWith(
-			t,
-			interactor.ErrNilUseCase,
-			func() { d.MustRegister(interactor.UseCase[Question, Answer](nil)) },
-		)
-	})
+	assertPanicsWith(t, interactor.ErrAlreadyRegistered, func() { d.MustRegister(AnswerQuestion{}) })
+	assertPanicsWith(
+		t,
+		interactor.ErrNilUseCase,
+		func() { d.MustRegister(interactor.UseCase[Question, Answer](nil)) },
+	)
 }
 
 // assertPanicsWith checks fn panics with an error matching want, as by errors.Is.

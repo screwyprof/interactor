@@ -89,7 +89,16 @@ func (d *Dispatcher) Dispatch[Res, Req any](ctx context.Context, req Req) (Res, 
 	return uc.Run(ctx, req) //nolint:wrapcheck // the use case's own error, returned unchanged as documented.
 }
 
-// isNil reports whether uc is nil or holds a nil pointer or func, any of which would panic in Run.
+// MustRegister is like [Dispatcher.Register] but panics if registration fails. Use it when wiring
+// an application at startup, where a duplicate or nil use case is a programming mistake.
+func (d *Dispatcher) MustRegister[Req, Res any](uc UseCase[Req, Res]) {
+	if err := d.Register(uc); err != nil {
+		panic(err)
+	}
+}
+
+// isNil reports whether uc is a nil interface, nil pointer or nil func. These are rejected at
+// registration rather than left to fail inside Dispatch.
 func isNil(uc any) bool {
 	if uc == nil {
 		return true
@@ -98,12 +107,4 @@ func isNil(uc any) bool {
 	v := reflect.ValueOf(uc)
 
 	return (v.Kind() == reflect.Pointer || v.Kind() == reflect.Func) && v.IsNil()
-}
-
-// MustRegister is like [Dispatcher.Register] but panics if registration fails. Use it when wiring
-// an application at startup, where a duplicate or nil use case is a programming mistake.
-func (d *Dispatcher) MustRegister[Req, Res any](uc UseCase[Req, Res]) {
-	if err := d.Register(uc); err != nil {
-		panic(err)
-	}
 }

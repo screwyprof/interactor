@@ -140,15 +140,15 @@ Scenarios fit table-driven tests too:
 func TestGreetScenarios(t *testing.T) {
 	tests := map[string]struct {
 		when Hello
-		then func(*testdsl.When[Hello, Greeting])
+		then func(*testdsl.When[Greeting])
 	}{
 		"greets by name": {
 			when: Hello{Name: "Gopher"},
-			then: func(w *testdsl.When[Hello, Greeting]) { w.Then(Greeting{Text: "Hello, Gopher!"}) },
+			then: func(w *testdsl.When[Greeting]) { w.Then(Greeting{Text: "Hello, Gopher!"}) },
 		},
 		"rejects empty names": {
 			when: Hello{},
-			then: func(w *testdsl.When[Hello, Greeting]) { w.ThenFailWith(ErrNoName) },
+			then: func(w *testdsl.When[Greeting]) { w.ThenFailWith(ErrNoName) },
 		},
 	}
 

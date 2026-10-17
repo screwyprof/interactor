@@ -49,21 +49,21 @@ func (s *Scenario) Given[Req, Res any](useCase interactor.UseCase[Req, Res]) *Gi
 }
 
 // When is a scenario whose use case has run, holding what it returned.
-type When[Req, Res any] struct {
+type When[Res any] struct {
 	tb  testing.TB
 	got Res
 	err error
 }
 
 // When runs the use case with req under the test's context.
-func (g *Given[Req, Res]) When(req Req) *When[Req, Res] {
+func (g *Given[Req, Res]) When(req Req) *When[Res] {
 	got, err := g.useCase.Run(g.tb.Context(), req)
 
-	return &When[Req, Res]{tb: g.tb, got: got, err: err}
+	return &When[Res]{tb: g.tb, got: got, err: err}
 }
 
 // Then expects the use case to have succeeded and returned want.
-func (w *When[Req, Res]) Then(want Res) {
+func (w *When[Res]) Then(want Res) {
 	w.tb.Helper()
 
 	require.NoError(w.tb, w.err)
@@ -71,7 +71,7 @@ func (w *When[Req, Res]) Then(want Res) {
 }
 
 // ThenFailWith expects the use case to have failed with an error matching want, as by [errors.Is].
-func (w *When[Req, Res]) ThenFailWith(want error) {
+func (w *When[Res]) ThenFailWith(want error) {
 	w.tb.Helper()
 
 	require.ErrorIs(w.tb, w.err, want)
@@ -79,7 +79,7 @@ func (w *When[Req, Res]) ThenFailWith(want error) {
 
 // ThenCheck runs check on what the use case returned, for expectations Then and ThenFailWith do
 // not cover.
-func (w *When[Req, Res]) ThenCheck(check func(tb testing.TB, got Res, err error)) {
+func (w *When[Res]) ThenCheck(check func(tb testing.TB, got Res, err error)) {
 	w.tb.Helper()
 
 	check(w.tb, w.got, w.err)
