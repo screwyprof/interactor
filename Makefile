@@ -3,6 +3,7 @@ GO_FILES = $(shell git ls-files -co --exclude-standard "*.go")
 # Tools run with `go run pkg@version`, so the version named here is the one that runs, locally and in CI.
 GOLANGCI_VERSION := v2.15.0
 REVIEWDOG_VERSION := v0.21.2
+GOVULNCHECK_VERSION := v1.9.0
 GOLANGCI := go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 
 SHELL := bash
@@ -39,6 +40,11 @@ lint-annotate:
 		| go run github.com/reviewdog/reviewdog/cmd/reviewdog@$(REVIEWDOG_VERSION) \
 			-f=golangci-lint -name=golangci-lint -reporter=github-pr-check -fail-level=any
 
+# Reachability-aware: reports only advisories in code this module can actually call.
+vulns: ## report known vulnerabilities reachable from this module
+	@echo -e "$(OK_COLOR)==> Vulnerabilities$(NO_COLOR)"
+	go run golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION) ./...
+
 test: ## run all tests
 	@echo -e "$(OK_COLOR)--> Running unit tests$(NO_COLOR)"
 	go test -race -count=1 -shuffle=on -timeout=120s -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
@@ -57,4 +63,4 @@ help: ## show this help screen
 # To avoid unintended conflicts with file names, always add to .PHONY
 # unless there is a reason not to.
 # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
-.PHONY: all fmt lint lint-all lint-fix lint-annotate test coverage clean help
+.PHONY: all fmt lint lint-all lint-fix lint-annotate vulns test coverage clean help
