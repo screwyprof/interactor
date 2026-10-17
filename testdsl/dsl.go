@@ -17,13 +17,15 @@
 package testdsl
 
 import (
-	"reflect"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/screwyprof/interactor/v3"
+	"github.com/screwyprof/interactor/v3/internal/nilcheck"
 )
 
 // Scenario starts a test. Create one with [Test].
@@ -48,7 +50,7 @@ type Given[Req, Res any] struct {
 func (s *Scenario) Given[Req, Res any](useCase interactor.UseCase[Req, Res]) *Given[Req, Res] {
 	s.tb.Helper()
 
-	if isNil(useCase) {
+	if nilcheck.IsNil(useCase) {
 		require.FailNow(s.tb, "testdsl: Given needs a use case, got nil")
 	}
 
@@ -64,16 +66,22 @@ type When[Res any] struct {
 }
 
 // When runs the use case with req under the test's context. The scenario must end with one of the
-// Then methods; the test fails if it does not.
+// Then methods, or the test fails naming the line that started it. Call When and Then from the
+// test's goroutine, as for any test that can fail. testdsl is for tests: each scenario is kept
+// until the test ends, so in benchmarks call the use case directly.
 func (g *Given[Req, Res]) When(req Req) *When[Res] {
 	g.tb.Helper()
+
+	_, file, line, _ := runtime.Caller(1)
 
 	got, err := g.useCase.Run(g.tb.Context(), req)
 	w := &When[Res]{tb: g.tb, got: got, err: err}
 
 	g.tb.Cleanup(func() {
-		if !w.checked {
-			g.tb.Errorf("testdsl: scenario has no Then, ThenFailWith or ThenCheck")
+		// A test that already failed stopped before its Then; reporting that too would be noise.
+		if !w.checked && !g.tb.Failed() {
+			g.tb.Errorf("testdsl: scenario at %s:%d has no Then, ThenFailWith or ThenCheck",
+				filepath.Base(file), line)
 		}
 	})
 
@@ -90,9 +98,14 @@ func (w *When[Res]) Then(want Res) {
 }
 
 // ThenFailWith expects the use case to have failed with an error matching want, as by [errors.Is].
+// want must not be nil.
 func (w *When[Res]) ThenFailWith(want error) {
 	w.tb.Helper()
 	w.checked = true
+
+	if want == nil {
+		require.FailNow(w.tb, "testdsl: ThenFailWith needs the error to expect, got nil")
+	}
 
 	require.Error(w.tb, w.err)
 	require.ErrorIs(w.tb, w.err, want)
@@ -104,16 +117,9 @@ func (w *When[Res]) ThenCheck(check func(tb testing.TB, got Res, err error)) {
 	w.tb.Helper()
 	w.checked = true
 
-	check(w.tb, w.got, w.err)
-}
-
-// isNil mirrors the dispatcher's check: a nil interface, nil pointer or nil func.
-func isNil(useCase any) bool {
-	if useCase == nil {
-		return true
+	if check == nil {
+		require.FailNow(w.tb, "testdsl: ThenCheck needs a check, got nil")
 	}
 
-	v := reflect.ValueOf(useCase)
-
-	return (v.Kind() == reflect.Pointer || v.Kind() == reflect.Func) && v.IsNil()
+	check(w.tb, w.got, w.err)
 }

@@ -3,8 +3,10 @@ package testdsl_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -39,11 +41,11 @@ func (p Pinger) Run(ctx context.Context, req Ping) (Pong, error) {
 // fakeTB records failures instead of failing the real test, so the DSL's own failures can be
 // asserted. FailNow ends the scenario's goroutine as testing.T does.
 type fakeTB struct {
-	testing.TB
+	testing.TB // methods the DSL must not call panic through the nil interface
 
 	ctx      context.Context //nolint:containedctx // a fake TB has to return a context from Context().
-	mu       sync.Mutex
-	failed   bool
+	errors   []string        // every failure message, in order
+	stopped  bool            // FailNow was called
 	cleanups []func()
 }
 
@@ -51,42 +53,46 @@ func (f *fakeTB) Helper() {}
 
 func (f *fakeTB) Name() string { return "fake" }
 
-func (f *fakeTB) Errorf(string, ...any) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
-	f.failed = true
+func (f *fakeTB) Errorf(format string, args ...any) {
+	f.errors = append(f.errors, fmt.Sprintf(format, args...))
 }
 
 func (f *fakeTB) FailNow() {
-	f.Errorf("")
+	f.stopped = true
+
 	runtime.Goexit()
 }
+
+func (f *fakeTB) Failed() bool { return len(f.errors) > 0 || f.stopped }
 
 func (f *fakeTB) Cleanup(fn func()) { f.cleanups = append(f.cleanups, fn) }
 
 func (f *fakeTB) Context() context.Context { return f.ctx }
 
-// failed runs scenario against a fakeTB, then its cleanups, and reports whether it failed.
-func failed(t *testing.T, scenario func(tb testing.TB)) bool {
+// run runs scenario against a fakeTB on its own goroutine, as testing.T would, then its cleanups.
+// Waiting for the goroutine orders its writes to f before the reads here, so f needs no lock.
+func run(t *testing.T, scenario func(tb testing.TB)) *fakeTB {
 	t.Helper()
 
 	f := &fakeTB{ctx: t.Context()}
-	done := make(chan struct{})
 
-	go func() {
-		defer close(done)
+	var wg sync.WaitGroup
 
-		scenario(f)
-	}()
-
-	<-done
+	wg.Go(func() { scenario(f) })
+	wg.Wait()
 
 	for _, cleanup := range slices.Backward(f.cleanups) {
 		cleanup()
 	}
 
-	return f.failed
+	return f
+}
+
+// failed runs scenario and reports whether it failed.
+func failed(t *testing.T, scenario func(tb testing.TB)) bool {
+	t.Helper()
+
+	return run(t, scenario).Failed()
 }
 
 func TestThen(t *testing.T) {
@@ -155,33 +161,101 @@ func TestThenFailWith(t *testing.T) {
 			testdsl.Test(tb).Given(Pinger{}).When(Ping{}).ThenFailWith(errBoom)
 		}))
 	})
-
-	t.Run("fails when the use case succeeds, even for a nil expected error", func(t *testing.T) {
-		t.Parallel()
-
-		assert.True(t, failed(t, func(tb testing.TB) {
-			tb.Helper()
-
-			testdsl.Test(tb).Given(Pinger{}).When(Ping{}).ThenFailWith(nil)
-		}))
-	})
 }
 
 func TestThenCheck(t *testing.T) {
 	t.Parallel()
 
-	var got Pong
+	t.Run("hands over the scenario's TB and the typed result", func(t *testing.T) {
+		t.Parallel()
 
-	assert.False(t, failed(t, func(tb testing.TB) {
+		var (
+			gotTB  testing.TB
+			gotRes Pong
+		)
+
+		f := run(t, func(tb testing.TB) {
+			tb.Helper()
+
+			testdsl.Test(tb).Given(Pinger{}).When(Ping{}).ThenCheck(func(tb testing.TB, res Pong, _ error) {
+				tb.Helper()
+
+				gotTB, gotRes = tb, res
+			})
+		})
+
+		assert.False(t, f.Failed())
+		assert.Same(t, f, gotTB)
+		assert.Equal(t, Pong{OK: true}, gotRes)
+	})
+
+	t.Run("fails cleanly on a nil check", func(t *testing.T) {
+		t.Parallel()
+
+		f := run(t, func(tb testing.TB) {
+			tb.Helper()
+
+			testdsl.Test(tb).Given(Pinger{}).When(Ping{}).ThenCheck(nil)
+		})
+
+		assert.True(t, f.stopped)
+		assert.Contains(t, strings.Join(f.errors, "\n"), "ThenCheck needs a check")
+	})
+}
+
+func TestThenFailWithNeedsAnError(t *testing.T) {
+	t.Parallel()
+
+	f := run(t, func(tb testing.TB) {
 		tb.Helper()
 
-		testdsl.Test(tb).Given(Pinger{}).When(Ping{}).ThenCheck(func(_ testing.TB, res Pong, err error) {
-			got = res
+		testdsl.Test(tb).Given(Pinger{}).When(Ping{Fail: true}).ThenFailWith(nil)
+	})
 
-			require.NoError(tb, err)
+	assert.True(t, f.stopped)
+	assert.Contains(t, strings.Join(f.errors, "\n"), "ThenFailWith needs the error to expect")
+}
+
+func TestFailingThenReportsOnce(t *testing.T) {
+	t.Parallel()
+
+	f := run(t, func(tb testing.TB) {
+		tb.Helper()
+
+		testdsl.Test(tb).Given(Pinger{}).When(Ping{}).Then(Pong{OK: false})
+	})
+
+	require.Len(t, f.errors, 1, "a failing Then must not also report a missing Then")
+}
+
+func TestMissingThen(t *testing.T) {
+	t.Parallel()
+
+	t.Run("names the scenario's line", func(t *testing.T) {
+		t.Parallel()
+
+		f := run(t, func(tb testing.TB) {
+			tb.Helper()
+
+			testdsl.Test(tb).Given(Pinger{}).When(Ping{})
 		})
-	}))
-	assert.Equal(t, Pong{OK: true}, got)
+
+		require.Len(t, f.errors, 1)
+		assert.Contains(t, f.errors[0], "dsl_test.go:")
+	})
+
+	t.Run("stays quiet when the test already failed", func(t *testing.T) {
+		t.Parallel()
+
+		f := run(t, func(tb testing.TB) {
+			tb.Helper()
+
+			testdsl.Test(tb).Given(Pinger{}).When(Ping{})
+			tb.Errorf("setup failed")
+		})
+
+		assert.Equal(t, []string{"setup failed"}, f.errors)
+	})
 }
 
 func TestGivenRejectsANilUseCase(t *testing.T) {
@@ -204,16 +278,6 @@ func TestGivenRejectsANilUseCase(t *testing.T) {
 			}))
 		})
 	}
-}
-
-func TestScenarioWithoutThenFails(t *testing.T) {
-	t.Parallel()
-
-	assert.True(t, failed(t, func(tb testing.TB) {
-		tb.Helper()
-
-		testdsl.Test(tb).Given(Pinger{}).When(Ping{})
-	}))
 }
 
 func TestWhenRunsUnderTheTestContext(t *testing.T) {

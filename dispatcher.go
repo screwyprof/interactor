@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"sync"
 	"sync/atomic"
+
+	"github.com/screwyprof/interactor/v3/internal/nilcheck"
 )
 
 // Dispatcher routes a request to the use case registered for its type.
@@ -27,12 +29,16 @@ type entry struct {
 
 // Register adds uc as the use case for requests of type Req.
 //
-// Request types match exactly: Req and *Req are different types. It returns [ErrNilUseCase] for
-// a nil use case and [ErrAlreadyRegistered] if Req already has one.
+// Request types match exactly: Req and *Req are different types. For a nil use case the error
+// wraps [ErrNilUseCase], and if Req already has one it wraps [ErrAlreadyRegistered]; both name
+// the request type.
+//
+// Register is meant for wiring at startup: each call copies the registrations, so that Dispatch
+// can read them without locking.
 func (d *Dispatcher) Register[Req, Res any](uc UseCase[Req, Res]) error {
 	reqType := reflect.TypeFor[Req]()
 
-	if isNil(uc) {
+	if nilcheck.IsNil(uc) {
 		return fmt.Errorf("%w: %v", ErrNilUseCase, reqType)
 	}
 
@@ -107,16 +113,4 @@ func (d *Dispatcher) MustRegister[Req, Res any](uc UseCase[Req, Res]) {
 	if err := d.Register(uc); err != nil {
 		panic(err)
 	}
-}
-
-// isNil reports whether uc is a nil interface, nil pointer or nil func. These are rejected at
-// registration rather than left to fail inside Dispatch.
-func isNil(uc any) bool {
-	if uc == nil {
-		return true
-	}
-
-	v := reflect.ValueOf(uc)
-
-	return (v.Kind() == reflect.Pointer || v.Kind() == reflect.Func) && v.IsNil()
 }

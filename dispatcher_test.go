@@ -4,7 +4,6 @@ import (
 	"context"
 	"reflect"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,6 +25,22 @@ func TestDispatch(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, Answer{Value: 42}, got)
+	})
+
+	t.Run("serves every registered request type", func(t *testing.T) {
+		t.Parallel()
+
+		var d interactor.Dispatcher
+		d.MustRegister(AnswerQuestion{})
+		d.MustRegister(Echo{})
+
+		answer, err := d.Dispatch[Answer](t.Context(), Question{ID: 21})
+		require.NoError(t, err)
+		assert.Equal(t, Answer{Value: 42}, answer)
+
+		shout, err := d.Dispatch[Shout](t.Context(), Shout{Text: "hey"})
+		require.NoError(t, err)
+		assert.Equal(t, Shout{Text: "hey"}, shout)
 	})
 
 	t.Run("returns the use case's error unchanged", func(t *testing.T) {
@@ -150,33 +165,73 @@ func TestRegister(t *testing.T) {
 func TestDispatcherIsSafeForConcurrentUse(t *testing.T) {
 	t.Parallel()
 
-	var (
-		d          interactor.Dispatcher
-		registered atomic.Int32
-		wg         sync.WaitGroup
-	)
+	// Eight distinct request types register and dispatch at once. A lost update between two
+	// registrations, or a published map changed in place, leaves a type unregistered or races.
+	// One round can miss the interleaving, so the race is repeated on a fresh dispatcher.
+	for range 20 {
+		var (
+			d     interactor.Dispatcher
+			start = make(chan struct{})
+			wg    sync.WaitGroup
+		)
 
-	for range 10 {
-		wg.Go(func() {
-			if d.Register(AnswerQuestion{}) == nil {
-				registered.Add(1)
-			}
-		})
-		wg.Go(func() {
-			got, err := d.Dispatch[Answer](t.Context(), Question{ID: 1})
-			if err != nil {
-				assert.ErrorIs(t, err, interactor.ErrUseCaseNotFound)
+		probes := []probe{
+			newProbe[[0]int](t, &d, start), newProbe[[1]int](t, &d, start),
+			newProbe[[2]int](t, &d, start), newProbe[[3]int](t, &d, start),
+			newProbe[[4]int](t, &d, start), newProbe[[5]int](t, &d, start),
+			newProbe[[6]int](t, &d, start), newProbe[[7]int](t, &d, start),
+		}
+		for _, p := range probes {
+			wg.Go(p.race)
+		}
+
+		close(start)
+		wg.Wait()
+
+		for _, p := range probes {
+			p.served()
+		}
+	}
+}
+
+// Ticket is a distinct request type per K, so tests can register many types.
+type Ticket[K any] struct{ N int }
+
+// Stamp answers a Ticket with itself.
+type Stamp[K any] struct{}
+
+func (Stamp[K]) Run(_ context.Context, t Ticket[K]) (Ticket[K], error) { return t, nil }
+
+// probe exercises one request type: race registers it and dispatches to it once start closes,
+// alongside other probes; served then checks it is still registered.
+type probe struct{ race, served func() }
+
+func newProbe[K any](t *testing.T, d *interactor.Dispatcher, start <-chan struct{}) probe {
+	t.Helper()
+
+	return probe{
+		race: func() {
+			<-start
+
+			// t.Errorf rather than require: this runs off the test goroutine.
+			if err := d.Register(Stamp[K]{}); err != nil {
+				t.Errorf("register %T: %v", Stamp[K]{}, err)
 
 				return
 			}
 
-			assert.Equal(t, Answer{Value: 2}, got)
-		})
+			for range 50 {
+				got, err := d.Dispatch[Ticket[K]](t.Context(), Ticket[K]{N: 1})
+				if assert.NoError(t, err) {
+					assert.Equal(t, Ticket[K]{N: 1}, got)
+				}
+			}
+		},
+		served: func() {
+			_, err := d.Dispatch[Ticket[K]](t.Context(), Ticket[K]{})
+			assert.NoError(t, err, "%T must still be registered", Ticket[K]{})
+		},
 	}
-
-	wg.Wait()
-
-	assert.Equal(t, int32(1), registered.Load(), "exactly one concurrent registration must win")
 }
 
 func BenchmarkDispatch(b *testing.B) {
@@ -196,13 +251,17 @@ func BenchmarkDispatch(b *testing.B) {
 	}
 }
 
-// BenchmarkDispatchParallel is Dispatch under contention, as when every request goes through one
-// Dispatcher.
+// BenchmarkDispatchParallel is Dispatch from every CPU at once, as when every request goes through
+// one Dispatcher.
 func BenchmarkDispatchParallel(b *testing.B) {
 	var d interactor.Dispatcher
 	d.MustRegister(AnswerQuestion{})
 
 	ctx := b.Context()
+
+	if _, err := d.Dispatch[Answer](ctx, Question{ID: 1}); err != nil {
+		b.Fatal(err)
+	}
 
 	b.ReportAllocs()
 

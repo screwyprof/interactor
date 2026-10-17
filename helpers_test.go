@@ -32,3 +32,10 @@ func legacyAnswerQuestion(_ context.Context, q Question, res *Answer) error {
 
 	return nil
 }
+
+type Shout struct{ Text string }
+
+// Echo repeats the shout back.
+type Echo struct{}
+
+func (Echo) Run(_ context.Context, s Shout) (Shout, error) { return s, nil }
