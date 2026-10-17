@@ -57,11 +57,8 @@ func Must(fn UseCaseRunnerFn, err error) UseCaseRunnerFn {
 // The function `Run` must have the following signature:
 //
 //  1. Have 3 arguments:
-//
 //     - ctx context.Context,
-//
 //     - req a struct which implements Request interface,
-//
 //     - res a pointer to a struct which implements Response interface.
 //
 //  2. Return an error
@@ -159,7 +156,7 @@ func thirdArgIsResponse(useCaseRunnerType reflect.Type) bool {
 func invokeUseCaseRunner(useCaseRunner any, args ...any) error {
 	result := invoke(useCaseRunner, args...)
 
-	if err, ok := result[0].Interface().(error); ok && err != nil {
+	if err, ok := reflect.TypeAssert[error](result[0]); ok && err != nil {
 		return err
 	}
 
