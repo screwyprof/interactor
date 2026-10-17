@@ -4,7 +4,7 @@
 
 `Interactor` runs use cases and dispatches requests to them by request type. It is inspired by Uncle Bob's [Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) and the interactor concept described there.
 
-A use case is any type with a `Run` method from a request to a response. The compiler checks the types; there is no reflection on the call path.
+A use case is any type with a `Run` method from a request to a response. The compiler checks the types, and the use case is called directly: reflection is only used to find it by request type, never to call it.
 
 ## Installation
 
@@ -179,9 +179,11 @@ v3 replaces the reflection-based API with generics. Most of what v2 checked at r
 | a request held in `any` was routed by its dynamic type | routing uses the static type: pass the concrete request |
 | registering a type twice overwrote the first | `ErrAlreadyRegistered`, and `MustRegister` panics |
 | a nil runner failed at `Run` with `ErrUseCaseRunnerNotFound` | `ErrNilUseCase` at `Register` |
+| a use case could write to `res` and return an error, and the caller kept both | `FromOutParam` returns the zero response with the error: put such details in the error |
 | `ErrUseCaseRunnerNotFound` | `ErrUseCaseNotFound` |
 | `ErrResultTypeMismatch` | `*ResponseTypeError` |
-| `Request`, `Response`, `Func`, `Adapt`, `Must`, `MustAdapt` and their signature errors | removed: the compiler checks what they checked at runtime |
+| `Request`, `Response`, `Func`, `Adapt`, `Must`, `MustAdapt` and their runtime errors (`ErrRequestTypeMismatch`, `ErrInvalidReturnType`, …) | removed: the compiler checks what they checked at runtime |
+| `testdsl.Test(t)(Given(r), When(ctx, req, &res), Then(want))` and its `GivenFn`, `WhenFn`, `ThenFn`, `Checker` types | `testdsl.Test(t).Given(uc).When(req).Then(want)`, checked at compile time; `ThenFailWith(err)` keeps its name |
 
 To move one use case at a time, wrap a v2-style one with `FromOutParam`; it registers unchanged:
 

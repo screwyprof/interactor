@@ -9,13 +9,6 @@ repos:
         types: [go]
         pass_filenames: false
 
-      - id: go-build
-        name: go build
-        entry: go build ./...
-        language: system
-        types: [go]
-        pass_filenames: false
-
       - id: go-lint
         name: golangci-lint
         entry: make lint
