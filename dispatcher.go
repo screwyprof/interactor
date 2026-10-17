@@ -3,8 +3,10 @@ package interactor
 import (
 	"context"
 	"fmt"
+	"maps"
 	"reflect"
 	"sync"
+	"sync/atomic"
 )
 
 // Dispatcher routes a request to the use case registered for its type.
@@ -12,8 +14,8 @@ import (
 // The zero value is ready to use. A Dispatcher is safe for concurrent use and must not be copied
 // after first use.
 type Dispatcher struct {
-	mu       sync.RWMutex
-	useCases map[reflect.Type]entry
+	mu       sync.Mutex                             // serialises Register
+	useCases atomic.Pointer[map[reflect.Type]entry] // read lock-free; replaced, never modified
 }
 
 // entry keeps the use case with its response type, so a mismatched Dispatch can say what was
@@ -37,15 +39,21 @@ func (d *Dispatcher) Register[Req, Res any](uc UseCase[Req, Res]) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if _, ok := d.useCases[reqType]; ok {
+	var current map[reflect.Type]entry
+	if p := d.useCases.Load(); p != nil {
+		current = *p
+	}
+
+	if _, ok := current[reqType]; ok {
 		return fmt.Errorf("%w: %v", ErrAlreadyRegistered, reqType)
 	}
 
-	if d.useCases == nil {
-		d.useCases = make(map[reflect.Type]entry)
-	}
+	// Copy on write: dispatching reads the published map without a lock, so it is never modified.
+	next := make(map[reflect.Type]entry, len(current)+1)
+	maps.Copy(next, current)
+	next[reqType] = entry{useCase: uc, response: reflect.TypeFor[Res]()}
 
-	d.useCases[reqType] = entry{useCase: uc, response: reflect.TypeFor[Res]()}
+	d.useCases.Store(&next)
 
 	return nil
 }
@@ -73,9 +81,13 @@ func (d *Dispatcher) Dispatch[Res, Req any](ctx context.Context, req Req) (Res, 
 
 	reqType := reflect.TypeFor[Req]()
 
-	d.mu.RLock()
-	e, ok := d.useCases[reqType]
-	d.mu.RUnlock()
+	var (
+		e  entry
+		ok bool
+	)
+	if m := d.useCases.Load(); m != nil {
+		e, ok = (*m)[reqType]
+	}
 
 	if !ok {
 		return zero, fmt.Errorf("%w: %v", ErrUseCaseNotFound, reqType)

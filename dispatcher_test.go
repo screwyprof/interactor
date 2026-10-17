@@ -196,6 +196,23 @@ func BenchmarkDispatch(b *testing.B) {
 	}
 }
 
+// BenchmarkDispatchParallel is Dispatch under contention, as when every request goes through one
+// Dispatcher.
+func BenchmarkDispatchParallel(b *testing.B) {
+	var d interactor.Dispatcher
+	d.MustRegister(AnswerQuestion{})
+
+	ctx := b.Context()
+
+	b.ReportAllocs()
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			_, _ = d.Dispatch[Answer](ctx, Question{ID: 1})
+		}
+	})
+}
+
 // BenchmarkDirect is the floor Dispatch is measured against: the same use case, called directly.
 func BenchmarkDirect(b *testing.B) {
 	uc := AnswerQuestion{}
