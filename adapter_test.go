@@ -25,6 +25,25 @@ func TestFunc(t *testing.T) {
 			wantErr: interactor.ErrUseCaseRunnerIsNotAFunction,
 		},
 		{
+			name:    "a use case runner must not be a nil function",
+			runner:  (func(context.Context, TestRequest, *TestResponse) error)(nil),
+			wantErr: interactor.ErrUseCaseRunnerIsNotAFunction,
+		},
+		{
+			name: "first input param must be context.Context, not a type implementing it",
+			runner: func(_ *customContext, _ TestRequest, _ *TestResponse) error {
+				return nil
+			},
+			wantErr: interactor.ErrFirstArgHasInvalidType,
+		},
+		{
+			name: "first input param must be context.Context, not a wider interface",
+			runner: func(_ extendedContext, _ TestRequest, _ *TestResponse) error {
+				return nil
+			},
+			wantErr: interactor.ErrFirstArgHasInvalidType,
+		},
+		{
 			name:    "a use case runner must return an error",
 			runner:  func(_ context.Context, _ TestRequest, _ *TestResponse) {},
 			wantErr: interactor.ErrInvalidReturnType,
@@ -155,6 +174,11 @@ func TestAdapt(t *testing.T) {
 			wantErr: interactor.ErrUseCaseRunnerHasNoRunMethod,
 		},
 		{
+			name:    "a use case must not be a nil pointer",
+			runner:  (*ConcreteUseCase)(nil),
+			wantErr: interactor.ErrUseCaseRunnerHasNoRunMethod,
+		},
+		{
 			name:    "method must have 3 arguments",
 			runner:  InvalidUseCaseWrongSignature{},
 			wantErr: interactor.ErrInvalidUseCaseRunnerSignature,
@@ -212,17 +236,14 @@ func TestAdapt(t *testing.T) {
 	}
 }
 
-func TestFuncPassesNilContextThrough(t *testing.T) {
+func TestFuncRejectsNilContext(t *testing.T) {
 	t.Parallel()
 
 	runner := interactor.Must(interactor.Func(ConcreteUseCase{}.Run))
 
-	var res TestResponse
+	err := runner(nil, TestRequest{id: 7}, &TestResponse{})
 
-	err := runner(nil, TestRequest{id: 7}, &res)
-
-	require.NoError(t, err)
-	assert.Equal(t, 7, res.result)
+	require.ErrorIs(t, err, interactor.ErrNilContext)
 }
 
 func TestMust(t *testing.T) {

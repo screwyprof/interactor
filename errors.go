@@ -14,4 +14,5 @@ var (
 	ErrResultTypeMismatch            = errors.New("result type mismatch")
 	ErrRequestTypeMismatch           = errors.New("request type mismatch")
 	ErrInvalidReturnType             = errors.New("useCaseRunner must return a single error")
+	ErrNilContext                    = errors.New("context must not be nil")
 )

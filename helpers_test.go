@@ -27,6 +27,15 @@ func (i ConcreteUseCase) Run(_ context.Context, req TestRequest, res *TestRespon
 
 type AnotherResponse struct{}
 
+// customContext implements context.Context but is not context.Context itself.
+type customContext struct{ context.Context } //nolint:containedctx // a type implementing context.Context is the point.
+
+// extendedContext asks for more than context.Context provides.
+type extendedContext interface {
+	context.Context
+	Extra()
+}
+
 type InvalidUseCaseWrongSignature struct{}
 
 func (i InvalidUseCaseWrongSignature) Run(_ context.Context, _ TestRequest) error {

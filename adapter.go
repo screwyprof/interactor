@@ -56,7 +56,8 @@ func Must(fn UseCaseRunnerFn, err error) UseCaseRunnerFn {
 //
 //	func (uc *UseCase) Run(ctx context.Context, req TestRequest, res *TestResponse) error
 func Adapt(runner any) (UseCaseRunnerFn, error) {
-	if runner == nil {
+	// A typed nil pointer still has Run in its method set, but calling it would dereference nil.
+	if runner == nil || isNilPointer(reflect.ValueOf(runner)) {
 		return nil, fmt.Errorf("%w: nil given", ErrUseCaseRunnerHasNoRunMethod)
 	}
 
@@ -118,9 +119,17 @@ func newRunner(fnValue reflect.Value) (UseCaseRunnerFn, error) {
 		return nil, err
 	}
 
-	ctxType, reqType, respType := fnType.In(0), fnType.In(1), fnType.In(2)
+	if fnValue.IsNil() {
+		return nil, fmt.Errorf("%w: nil %s given", ErrUseCaseRunnerIsNotAFunction, fnType)
+	}
+
+	reqType, respType := fnType.In(1), fnType.In(2)
 
 	return func(ctx context.Context, req Request, resp Response) error {
+		if ctx == nil {
+			return ErrNilContext
+		}
+
 		if err := ensureArgHasType(reqType, req, ErrRequestTypeMismatch); err != nil {
 			return err
 		}
@@ -129,7 +138,7 @@ func newRunner(fnValue reflect.Value) (UseCaseRunnerFn, error) {
 			return err
 		}
 
-		in := [3]reflect.Value{contextValue(ctx, ctxType), reflect.ValueOf(req), reflect.ValueOf(resp)}
+		in := [3]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(req), reflect.ValueOf(resp)}
 		if err, ok := reflect.TypeAssert[error](fnValue.Call(in[:])[0]); ok && err != nil {
 			return err
 		}
@@ -146,14 +155,8 @@ func ensureArgHasType(want reflect.Type, arg any, errMismatch error) error {
 	return nil
 }
 
-// contextValue passes a nil context as the zero value of the parameter's type:
-// reflect.ValueOf(nil) is the zero Value, which Call rejects.
-func contextValue(ctx context.Context, ctxType reflect.Type) reflect.Value {
-	if ctx == nil {
-		return reflect.Zero(ctxType)
-	}
-
-	return reflect.ValueOf(ctx)
+func isNilPointer(v reflect.Value) bool {
+	return v.Kind() == reflect.Pointer && v.IsNil()
 }
 
 func ensureParamsHaveValidTypes(useCaseRunnerType reflect.Type) error {
@@ -172,11 +175,10 @@ func ensureParamsHaveValidTypes(useCaseRunnerType reflect.Type) error {
 	return nil
 }
 
+// firstArgIsContext requires context.Context itself: callers pass a context.Context, which
+// cannot be assigned to a concrete type or to a wider interface even if those implement it.
 func firstArgIsContext(useCaseRunnerType reflect.Type) bool {
-	ctxtInterface := reflect.TypeFor[context.Context]()
-	ctx := useCaseRunnerType.In(0)
-
-	return ctx.Implements(ctxtInterface)
+	return useCaseRunnerType.In(0) == reflect.TypeFor[context.Context]()
 }
 
 func secondArgIsRequest(useCaseRunnerType reflect.Type) bool {
