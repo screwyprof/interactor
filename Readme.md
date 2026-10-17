@@ -59,6 +59,22 @@ func main() {
 - The zero `Dispatcher` is ready to use and safe for concurrent use.
 - Request types match exactly: `Hello` and `*Hello` are different types.
 
+### Do you need the dispatcher?
+
+Not when the caller knows the use case at compile time. `UseCase` is a plain interface, so inject it and call it directly: no lookup, no registration errors, and a missing dependency fails to compile.
+
+```go
+type Handler struct {
+	greet interactor.UseCase[Hello, Greeting]
+}
+
+func (h Handler) ServeHello(ctx context.Context, name string) (Greeting, error) {
+	return h.greet.Run(ctx, Hello{Name: name})
+}
+```
+
+Use the `Dispatcher` when the request type is only known at runtime, such as a transport layer that decodes a message and routes it by type.
+
 ### Errors
 
 | Error | When |
