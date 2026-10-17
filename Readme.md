@@ -182,6 +182,7 @@ v3 replaces the reflection-based API with generics. Most of what v2 checked at r
 | registering a type twice overwrote the first | `ErrAlreadyRegistered`, and `MustRegister` panics |
 | a nil runner failed at `Run` with `ErrUseCaseRunnerNotFound` | `ErrNilUseCase` at `Register` |
 | a use case could write to `res` and return an error, and the caller kept both | `FromOutParam` returns the zero response with the error: put such details in the error |
+| a use case could read fields the caller had filled in `res` beforehand | `FromOutParam` always starts from a zero response: move such inputs into the request |
 | `ErrUseCaseRunnerNotFound` | `ErrUseCaseNotFound` |
 | `ErrResultTypeMismatch` | `*ResponseTypeError` |
 | `Request`, `Response`, `Func`, `Adapt`, `Must`, `MustAdapt` and their runtime errors (`ErrRequestTypeMismatch`, `ErrInvalidReturnType`, …) | removed: the compiler checks what they checked at runtime |

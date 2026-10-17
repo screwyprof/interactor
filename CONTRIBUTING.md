@@ -2,7 +2,7 @@
 
 ## What you need
 
-Go 1.27, make, and git.
+Go 1.27, make, bash and git.
 
 ```shell
 git clone https://github.com/screwyprof/interactor
@@ -20,11 +20,12 @@ The git pre-commit hooks are optional. They need `pre-commit`, which is Python r
 
 ## The gates
 
-`make check` is what CI runs, so the two cannot drift. It prints one block per gate:
+`make check` is what CI runs, so the two cannot drift. It holds coverage at 100% of every package
+and prints one block per gate:
 
 | target | what it asks |
 | --- | --- |
-| `make test` | tests with `-race` and `-shuffle=on`, at 100% coverage of every package |
+| `make test` | tests with `-race` and `-shuffle=on`, writing the coverage profile |
 | `make lint-all` | the linters [.golangci.yml](.golangci.yml) enables, over the whole tree |
 | `make tidy` | `go mod tidy -diff`, so a stale go.mod or go.sum cannot reach main |
 | `make vulns` | govulncheck, which reports only what this module can actually call |

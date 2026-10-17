@@ -10,7 +10,9 @@ import "context"
 //
 // On error the response is the zero value, even if run wrote to it before failing: a v2 use case
 // that reports details alongside its error, such as validation problems, must return them in the
-// error instead.
+// error instead. run also always starts from a zero response: a v2 use case that read fields the
+// caller filled in beforehand, such as a requested page size, gets zero values; move those into
+// the request.
 //
 //	d.MustRegister(interactor.FromOutParam(legacy.Run))
 func FromOutParam[Req, Res any](run func(ctx context.Context, req Req, res *Res) error) UseCaseFunc[Req, Res] {
