@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sync"
 )
 
 // Dispatcher manages registered UseCaseRunners and dispatches requests to the appropriate UseCaseRunner.
+//
+// It is safe for concurrent use.
 type Dispatcher struct {
+	mu             sync.RWMutex
 	useCaseRunners map[reflect.Type]UseCaseRunnerFn
 }
 
@@ -21,6 +25,10 @@ func NewDispatcher() *Dispatcher {
 // Register registers the given UseCaseRunner for the provided request type.
 func (d *Dispatcher) Register(request Request, runner UseCaseRunnerFn) {
 	requestType := reflect.TypeOf(request)
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	d.useCaseRunners[requestType] = runner
 }
 
@@ -31,7 +39,10 @@ func (d *Dispatcher) Register(request Request, runner UseCaseRunnerFn) {
 func (d *Dispatcher) Run(ctx context.Context, req Request, resp Response) error {
 	reqType := reflect.TypeOf(req)
 
+	d.mu.RLock()
 	runner, ok := d.useCaseRunners[reqType]
+	d.mu.RUnlock()
+
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrUseCaseRunnerNotFound, reqType)
 	}

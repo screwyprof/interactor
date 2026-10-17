@@ -3,6 +3,7 @@ package interactor_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,4 +77,26 @@ func assertUseCaseRunnerNotFound(t *testing.T, err error) {
 	t.Helper()
 
 	assert.True(t, errors.Is(err, interactor.ErrUseCaseRunnerNotFound))
+}
+
+func TestDispatcherIsSafeForConcurrentUse(t *testing.T) {
+	t.Parallel()
+
+	dispatcher := interactor.NewDispatcher()
+	runner := interactor.MustAdapt(ConcreteUseCase{})
+
+	var wg sync.WaitGroup
+
+	for range 10 {
+		wg.Go(func() {
+			dispatcher.Register(TestRequest{}, runner)
+		})
+		wg.Go(func() {
+			var res TestResponse
+
+			_ = dispatcher.Run(context.Background(), TestRequest{id: 1}, &res)
+		})
+	}
+
+	wg.Wait()
 }

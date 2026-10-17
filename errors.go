@@ -12,4 +12,6 @@ var (
 	ErrSecondArgHasInvalidType       = errors.New("second input argument must implement Request interface")
 	ErrThirdArgHasInvalidType        = errors.New("third input argument must implement Response interface")
 	ErrResultTypeMismatch            = errors.New("result type mismatch")
+	ErrRequestTypeMismatch           = errors.New("request type mismatch")
+	ErrInvalidReturnType             = errors.New("useCaseRunner must return a single error")
 )

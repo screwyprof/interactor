@@ -59,7 +59,7 @@ func main() {
 
 	// Create a new dispatcher and register the use case runner.
 	dispatcher := interactor.NewDispatcher()
-	dispatcher.Register(TestRequest{}, interactor.MustAdapt(useCaseRunner.Run))
+	dispatcher.Register(TestRequest{}, interactor.MustAdapt(useCaseRunner))
 
 	// Run the use case
 	var res TestResponse

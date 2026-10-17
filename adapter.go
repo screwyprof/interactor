@@ -30,6 +30,10 @@ func Func(fn any) (UseCaseRunnerFn, error) {
 	}
 
 	return func(ctx context.Context, req Request, resp Response) error {
+		if err := ensureRequestHasValidType(useCaseRunnerType, req); err != nil {
+			return err
+		}
+
 		if err := ensureResultHasValidType(useCaseRunnerType, resp); err != nil {
 			return err
 		}
@@ -67,6 +71,10 @@ func Must(fn UseCaseRunnerFn, err error) UseCaseRunnerFn {
 //
 //	func (uc *UseCase) Run(ctx context.Context, req TestRequest, res *TestResponse) error
 func Adapt(runner any) (UseCaseRunnerFn, error) {
+	if runner == nil {
+		return nil, fmt.Errorf("%w: nil given", ErrUseCaseRunnerHasNoRunMethod)
+	}
+
 	fnValue := reflect.ValueOf(runner).MethodByName("Run")
 	if !fnValue.IsValid() {
 		return nil, fmt.Errorf("%w", ErrUseCaseRunnerHasNoRunMethod)
@@ -86,6 +94,10 @@ func MustAdapt(fn any) UseCaseRunnerFn {
 }
 
 func ensureSignatureIsValid(useCaseRunnerType reflect.Type) error {
+	if useCaseRunnerType == nil {
+		return fmt.Errorf("%w: nil given", ErrUseCaseRunnerIsNotAFunction)
+	}
+
 	if useCaseRunnerType.Kind() != reflect.Func {
 		return fmt.Errorf("%w: %s", ErrUseCaseRunnerIsNotAFunction, useCaseRunnerType.String())
 	}
@@ -96,6 +108,25 @@ func ensureSignatureIsValid(useCaseRunnerType reflect.Type) error {
 
 	if err := ensureParamsHaveValidTypes(useCaseRunnerType); err != nil {
 		return fmt.Errorf("%w", err)
+	}
+
+	if !returnsSingleError(useCaseRunnerType) {
+		return fmt.Errorf("%w: %s given", ErrInvalidReturnType, useCaseRunnerType.String())
+	}
+
+	return nil
+}
+
+func returnsSingleError(useCaseRunnerType reflect.Type) bool {
+	return useCaseRunnerType.NumOut() == 1 && useCaseRunnerType.Out(0) == reflect.TypeFor[error]()
+}
+
+func ensureRequestHasValidType(runnerType reflect.Type, req any) error {
+	want := runnerType.In(1)
+	got := reflect.TypeOf(req)
+
+	if got != want {
+		return fmt.Errorf("%w: want %v, got %v", ErrRequestTypeMismatch, want, got)
 	}
 
 	return nil
@@ -168,6 +199,14 @@ func invoke(fn any, args ...any) []reflect.Value {
 
 	in := make([]reflect.Value, len(args))
 	for i, arg := range args {
+		// reflect.ValueOf(nil) is the zero Value, which Call rejects; a nil argument such as
+		// a nil context has to be passed as the zero value of the parameter's type instead.
+		if arg == nil {
+			in[i] = reflect.Zero(v.Type().In(i))
+
+			continue
+		}
+
 		in[i] = reflect.ValueOf(arg)
 	}
 

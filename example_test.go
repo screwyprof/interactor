@@ -26,3 +26,46 @@ func ExampleDispatcher() {
 	// Output:
 	// The answer to life the universe and everything: 42
 }
+
+// The README usage example, compiled and run here. Types are prefixed to avoid clashing with
+// the test helpers; otherwise it must stay identical to the README.
+
+// ReadmeRequest represents a test request.
+type ReadmeRequest struct{}
+
+// ReadmeResponse represents a test response.
+type ReadmeResponse struct {
+	Result int
+}
+
+// ReadmeUseCase is an example use case implementation.
+type ReadmeUseCase struct {
+	Res int
+}
+
+// Run runs the use case with the given request.
+func (uc ReadmeUseCase) Run(_ context.Context, _ ReadmeRequest, res *ReadmeResponse) error {
+	res.Result = uc.Res
+
+	return nil
+}
+
+func ExampleMustAdapt() {
+	// Create a use case.
+	useCaseRunner := &ReadmeUseCase{Res: 42}
+
+	// Create a new dispatcher and register the use case runner.
+	dispatcher := interactor.NewDispatcher()
+	dispatcher.Register(ReadmeRequest{}, interactor.MustAdapt(useCaseRunner))
+
+	// Run the use case
+	var res ReadmeResponse
+	if err := dispatcher.Run(context.Background(), ReadmeRequest{}, &res); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Printf("The answer to life, the universe, and everything: %d\n", res.Result)
+
+	// Output:
+	// The answer to life, the universe, and everything: 42
+}
